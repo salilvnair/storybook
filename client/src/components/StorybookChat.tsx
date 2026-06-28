@@ -14,6 +14,7 @@ import { useStoryStore, type Story } from '../store/story-store';
 import { useSettingsStore } from '../store/settings-store';
 import { useTemplatesStore } from '../store/templates-store';
 import { TemplateSchematic } from './template/TemplateSchematic';
+import { ConvHistoryBox } from './chat/ConvHistoryBox';
 
 const LANDING_CHIPS = [
   { chipText: '🦊 Fox & the grapes', chatText: 'Tell the classic Aesop fable of the Fox and the Grapes as a 5-scene cartoon storybook for a 5 year old, with speech and thought bubbles.' },
@@ -155,11 +156,18 @@ const RENDERERS = [
   },
 ];
 
-export function StorybookChat() {
+interface Props { tabId: string }
+
+export function StorybookChat({ tabId }: Props) {
+  const resetServerHistory = useCallback(async () => {
+    await fetch(`/api/v1/conversation/reset/${tabId}`, { method: 'POST' }).catch(() => {});
+  }, [tabId]);
+
   const config = useMemo(
     () => ({
       apiHost: '',
-      conversationId: 'storybook-main',
+      conversationId: tabId,
+      onMessage: () => {},
       title: '',
       subtitle: '',
       placeholder: 'Describe the story you want to make for your little one…',
@@ -177,7 +185,8 @@ export function StorybookChat() {
       stream: { enabled: true, transport: 'sse' as const },
       renderers: RENDERERS,
     }),
-    [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tabId],
   );
 
   const theme = useMemo(
@@ -202,7 +211,10 @@ export function StorybookChat() {
 
   return (
     <div className="story-pane-chat">
-      <ConvEngineChat mode="fullscreen" config={config} theme={theme} />
+      <ConvHistoryBox conversationId={tabId} onClear={resetServerHistory} />
+      <div className="story-chat-inner">
+        <ConvEngineChat mode="fullscreen" config={config} theme={theme} />
+      </div>
     </div>
   );
 }

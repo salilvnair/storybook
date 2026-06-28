@@ -94,3 +94,14 @@ export function storyFile(id, name) {
 export function removeStory(id) {
   try { fs.rmSync(dirFor(id), { recursive: true, force: true }); return true; } catch { return false; }
 }
+
+/** Patch meta.json fields (e.g. archived, title). */
+export function patchStoryMeta(id, patch) {
+  try {
+    const file = path.join(dirFor(id), 'meta.json');
+    const meta = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const updated = { ...meta, ...patch };
+    fs.writeFileSync(file, JSON.stringify(updated, null, 2));
+    return updated;
+  } catch { return null; }
+}

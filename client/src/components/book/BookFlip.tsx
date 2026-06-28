@@ -57,7 +57,7 @@ export function BookFlip({ storyId, pageCount, title }: Props) {
         <div className="bp-num">Page {k}</div>
         <div className="bp-stitle">{sc?.title}</div>
         <p className="bp-narr">{sc?.narration}</p>
-        {sc?.says && <div className="bp-bubble bp-says">💬 “{sc.says}”</div>}
+        {sc?.says && <div className="bp-bubble bp-says">💬 &ldquo;{sc.says}&rdquo;</div>}
         {sc?.thinks && <div className="bp-bubble bp-thinks">💭 {sc.thinks}</div>}
       </div>
     );

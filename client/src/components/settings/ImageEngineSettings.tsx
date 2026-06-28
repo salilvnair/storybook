@@ -82,6 +82,17 @@ export function ImageEngineSettings() {
               <ToggleSwitchView checked={config.options.magic} onChange={(v) => setOption('magic', v)} size="md" accentColor={eng.accent} />
             </div>
           )}
+          {opts?.model && eng.models.length > 0 && (
+            <label className="ie-opt-row ie-opt-inline">
+              <div className="ie-opt-text"><div className="ie-opt-label">Model variant</div><div className="ie-opt-desc">Which model size to use.</div></div>
+              <SelectInputView
+                options={[{ value: '', label: 'Auto (server default)' }, ...eng.models.map((m) => ({ value: m, label: m.toUpperCase() }))]}
+                value={config.options.model || ''}
+                onChange={(v) => setOption('model', v)}
+                size="sm"
+              />
+            </label>
+          )}
           {opts?.preset && (
             <label className="ie-opt-row ie-opt-inline">
               <div className="ie-opt-text"><div className="ie-opt-label">Preset</div><div className="ie-opt-desc">Speed / quality trade-off.</div></div>

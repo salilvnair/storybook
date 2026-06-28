@@ -61,3 +61,7 @@ export const SaveIcon = (p: IconProps) => (
 );
 export const DownloadIcon = (p: IconProps) => (<Svg {...p}><path d="M12 3v12M7 11l5 5 5-5M5 21h14" /></Svg>);
 export const RefreshIcon = (p: IconProps) => (<Svg {...p}><path d="M21 12a9 9 0 1 1-3-6.7L21 7M21 3v4h-4" /></Svg>);
+export const MoreVertIcon = (p: IconProps) => (<Svg {...p}><circle cx="12" cy="5" r="1.2" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" /><circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none" /></Svg>);
+export const ArchiveIcon = (p: IconProps) => (<Svg {...p}><path d="M3 6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6z" /><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9" /><path d="M10 13h4" /></Svg>);
+export const PrintIcon = (p: IconProps) => (<Svg {...p}><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2" /><path d="M6 14h12v6H6z" /></Svg>);
+export const UnarchiveIcon = (p: IconProps) => (<Svg {...p}><path d="M3 6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6z" /><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9" /><path d="M12 13v4M10 15l2-2 2 2" /></Svg>);

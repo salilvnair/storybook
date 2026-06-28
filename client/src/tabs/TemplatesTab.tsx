@@ -8,7 +8,7 @@
  */
 import { useMemo, useState } from 'react';
 import { ConvEngineChat } from '@salilvnair/convengine-chat';
-import { ButtonView } from '@salilvnair/dui';
+import { ButtonView, SplitPanelView } from '@salilvnair/dui';
 import { TemplateBuilder } from '../components/template/TemplateBuilder';
 import { TemplatePreview } from '../components/template/TemplatePreview';
 import { TEMPLATE_RENDERERS } from '../components/template/templateRenderers';
@@ -61,14 +61,20 @@ export function TemplatesTab() {
         ))}
       </div>
 
-      <div className="tc-split">
-        {mode === 'manual' ? (
-          <div className="tc-builder-pane"><TemplateBuilder /></div>
-        ) : (
-          <div className="tc-chat-pane"><ConvEngineChat key={mode} mode="fullscreen" config={config} theme={theme} /></div>
-        )}
-        <TemplatePreview />
-      </div>
+      <SplitPanelView
+        direction="horizontal"
+        first={
+          mode === 'manual'
+            ? <div className="tc-builder-pane"><TemplateBuilder /></div>
+            : <div className="tc-chat-pane"><ConvEngineChat key={mode} mode="fullscreen" config={config} theme={theme} /></div>
+        }
+        second={<TemplatePreview />}
+        defaultSplit={44}
+        minFirstPct={30}
+        minSecondPct={30}
+        accentColor="var(--story-accent-3)"
+        style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}
+      />
     </div>
   );
 }

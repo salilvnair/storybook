@@ -84,7 +84,7 @@ const FEATURES: { key: keyof AiFeatures; label: string; desc: string }[] = [
 ];
 
 export function AiFeaturesPanel() {
-  const features = usePrefsStore((s) => s.features);
+  const features = usePrefsStore((s) => s.prefs.features);
   const setFeature = usePrefsStore((s) => s.setFeature);
   return (
     <div className="story-tab-scroll">

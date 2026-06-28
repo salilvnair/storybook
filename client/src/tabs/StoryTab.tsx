@@ -3,12 +3,14 @@ import { SplitPanelView } from '@salilvnair/dui';
 import { StorybookChat } from '../components/StorybookChat';
 import { StorybookCanvas } from '../components/StorybookCanvas';
 
-export function StoryTab() {
+interface Props { tabId: string }
+
+export function StoryTab({ tabId }: Props) {
   return (
     <div className="story-split">
       <SplitPanelView
         direction="horizontal"
-        first={<StorybookChat />}
+        first={<StorybookChat tabId={tabId} />}
         second={<StorybookCanvas />}
         defaultSplit={44}
         minFirstPct={20}

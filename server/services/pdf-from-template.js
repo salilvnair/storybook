@@ -112,15 +112,53 @@ export async function buildFromTemplate(spec, story, sceneImages = [], coverImag
     const img = await embed(sceneImages[i]);
 
     if (!isSpread) {
-      // Single page: full-bleed art + caption panel at the bottom.
+      // ── Image page (full-bleed) ──────────────────────────────────────────────
       drawSquare(page, img, 0, W, accent);
-      const pw = W * 0.86, ph = H * 0.2, px = (W - pw) / 2, py = H * 0.06;
-      page.drawSvgPath(roundedRectPath(pw, ph, 14), { x: px, y: py + ph, color: card });
-      const lines = wrap(scene.narration || scene.title, serif, 14, pw - 36);
-      let y = py + ph / 2 + (lines.length * 19) / 2 - 14;
-      for (const line of lines) {
-        page.drawText(line, { x: px + (pw - serif.widthOfTextAtSize(line, 14)) / 2, y, font: serif, size: 14, color: ink });
-        y -= 19;
+
+      // ── Text page ────────────────────────────────────────────────────────────
+      const textPage = pdf.addPage([W, H]);
+      textPage.drawRectangle({ x: 0, y: 0, width: W, height: H, color: accent });
+      if (t.glow) textPage.drawEllipse({ x: W / 2, y: H / 2, xScale: W * 0.45, yScale: H * 0.35, color: rgb(1, 1, 1), opacity: 0.15 });
+
+      const cardW = W * 0.80, cardH = H * 0.60;
+      const cardX = (W - cardW) / 2;
+      const cardY = (H - cardH) / 2;
+      textPage.drawSvgPath(roundedRectPath(cardW, cardH, 18), { x: cardX, y: cardY + cardH, color: card });
+      textPage.drawSvgPath(roundedRectPath(cardW, cardH, 18), { x: cardX, y: cardY + cardH, borderColor: frame, borderWidth: 1.6, opacity: 0 });
+
+      // Scene number
+      textPage.drawText(String(i + 1), { x: cardX + 16, y: cardY + 14, font: serif, size: 10, color: hex(t.palette[(i + 2) % t.palette.length]) });
+
+      // Title
+      const titleText = pdfText(scene.title || '');
+      if (titleText) {
+        const titleLines = wrap(titleText, serifBold, 17, cardW - 56);
+        let ty = cardY + cardH - 36;
+        for (const line of titleLines) {
+          textPage.drawText(line, { x: cardX + (cardW - serifBold.widthOfTextAtSize(line, 17)) / 2, y: ty, font: serifBold, size: 17, color: ink });
+          ty -= 22;
+        }
+      }
+
+      // Narration body
+      const bodySize = (scene.narration && scene.narration.length > 120) ? 14 : 16;
+      const lh = bodySize * 1.5;
+      const bodyLines = wrap(scene.narration || '', serif, bodySize, cardW - 56);
+      const blockH = bodyLines.length * lh;
+      let by = cardY + cardH / 2 + blockH / 2 - bodySize;
+      for (const line of bodyLines) {
+        textPage.drawText(line, { x: cardX + (cardW - serif.widthOfTextAtSize(line, bodySize)) / 2, y: by, font: serif, size: bodySize, color: ink });
+        by -= lh;
+      }
+
+      // Says / dialogue
+      if (scene.says) {
+        const sayLines = wrap(`"${scene.says}"`, serifBold, bodySize - 1, cardW - 56);
+        by -= 6;
+        for (const line of sayLines) {
+          textPage.drawText(line, { x: cardX + (cardW - serifBold.widthOfTextAtSize(line, bodySize - 1)) / 2, y: by, font: serifBold, size: bodySize - 1, color: emphasis });
+          by -= lh - 2;
+        }
       }
       continue;
     }

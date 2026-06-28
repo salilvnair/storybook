@@ -50,6 +50,12 @@ export interface Page {
 
 type Phase = 'idle' | 'generating' | 'done' | 'error';
 
+export interface GenStep {
+  step: number; total: number; pct: number;
+  elapsed_s: number; it_s: number;
+  prompt?: string; seed?: number; config?: string;
+}
+
 interface StoryState {
   story: Story | null;
   phase: Phase;
@@ -61,6 +67,7 @@ interface StoryState {
   pdfBase64: string | null;
   pdfFilename: string | null;
   storyId: string | null;
+  genStep: GenStep | null;
 
   regenerating: number | null;
   regeneratingCover: boolean;
@@ -70,6 +77,20 @@ interface StoryState {
   generate: (override?: { runpodUrl?: string }) => Promise<void>;
   regeneratePage: (index: number, override?: { runpodUrl?: string }) => Promise<void>;
   regenerateCover: (override?: { runpodUrl?: string }) => Promise<void>;
+}
+
+async function rebuildPdf(story: Story, cover: string, pages: Page[], set: any) {
+  try {
+    const spec = useTemplatesStore.getState().defaultSpec();
+    const pageImages = story.scenes.map((_, i) => pages[i]?.image_b64 || '');
+    const res = await fetch('/api/storybook/rebuild-pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ story, cover, pages: pageImages, spec }),
+    });
+    const data = await res.json();
+    if (data.pdf_base64) set({ pdfBase64: data.pdf_base64, pdfFilename: data.filename });
+  } catch { /* non-fatal — stale PDF is better than an error */ }
 }
 
 export const useStoryStore = create<StoryState>((set, get) => ({
@@ -83,6 +104,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   pdfBase64: null,
   pdfFilename: null,
   storyId: null,
+  genStep: null,
   regenerating: null,
   regeneratingCover: false,
 
@@ -100,7 +122,9 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      set({ cover: data.image_b64 || get().cover, regeneratingCover: false });
+      const newCover = data.image_b64 || get().cover;
+      set({ cover: newCover, regeneratingCover: false });
+      void rebuildPdf(story, newCover, get().pages, set);
     } catch (err) {
       set({ regeneratingCover: false, warns: [...get().warns, `Re-roll cover: ${err instanceof Error ? err.message : String(err)}`] });
     }
@@ -122,6 +146,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       const pages = [...get().pages];
       pages[index] = { index, title: scene.title, image_b64: data.image_b64 || '' };
       set({ pages, regenerating: null });
+      void rebuildPdf(story, get().cover, pages, set);
     } catch (err) {
       set({ regenerating: null, warns: [...get().warns, `Re-roll scene ${index + 1}: ${err instanceof Error ? err.message : String(err)}`] });
     }
@@ -138,6 +163,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       pdfBase64: null,
       pdfFilename: null,
       storyId: null,
+      genStep: null,
       regeneratingCover: false,
     }),
 
@@ -160,7 +186,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
 
     // Use the consumer's chosen default template + their AI feature toggles.
     const spec = useTemplatesStore.getState().defaultSpec();
-    const features = usePrefsStore.getState().features;
+    const features = usePrefsStore.getState().prefs.features;
     const t0 = Date.now();
     void audit('story.generate', `Generating "${story.title}" (${story.scenes.length} scenes)`, {
       title: story.title, scenes: story.scenes.length, template: spec.name,
@@ -221,8 +247,11 @@ function handleEvent(evt: any, set: any, get: any) {
     case 'warn':
       set({ warns: [...get().warns, evt.message] });
       break;
+    case 'gen_step':
+      set({ genStep: { step: evt.step, total: evt.total, pct: evt.pct, elapsed_s: evt.elapsed_s, it_s: evt.it_s, prompt: evt.prompt, seed: evt.seed, config: evt.config } });
+      break;
     case 'done': {
-      set({ phase: 'done', pdfBase64: evt.pdf_base64, pdfFilename: evt.filename, storyId: evt.storyId || null, progress: { step: 1, total: 1, pct: 100, label: 'Storybook ready!' } });
+      set({ phase: 'done', genStep: null, pdfBase64: evt.pdf_base64, pdfFilename: evt.filename, storyId: evt.storyId || null, progress: { step: 1, total: 1, pct: 100, label: 'Storybook ready!' } });
       // Mirror a DB row pointing to the saved bundle (daakia-style; visible in DB Explorer).
       const st = get().story;
       if (evt.storyId && st) {
@@ -235,7 +264,7 @@ function handleEvent(evt: any, set: any, get: any) {
       break;
     }
     case 'error':
-      set({ phase: 'error', error: evt.message });
+      set({ phase: 'error', genStep: null, error: evt.message });
       break;
   }
 }

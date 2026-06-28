@@ -11,12 +11,12 @@ import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
-import { ensureLoaded, generate as engineGenerate, engineList, status as engineStatus, getEngine } from '../services/engines/index.js';
+import { ensureLoaded, generate as engineGenerate, generateStream as engineGenerateStream, engineList, status as engineStatus, getEngine } from '../services/engines/index.js';
 import { resolveImageConfig, getImageConfig, setImageConfig } from '../store/image-config.js';
-import { saveStory, listStories, getStory, storyFile, removeStory } from '../store/story-library.js';
+import { saveStory, listStories, getStory, storyFile, removeStory, patchStoryMeta } from '../store/story-library.js';
 import { buildScenePrompt } from '../services/storyAgent.js';
 import { buildFromTemplate } from '../services/pdf-from-template.js';
-import { getConversation } from '../store/conversations.js';
+import { getConversation, resetConversation } from '../store/conversations.js';
 import { getPromptOverrides } from '../store/prompts.js';
 
 export function storybookRouter() {
@@ -36,6 +36,10 @@ export function storybookRouter() {
     return rec ? res.json(rec) : res.status(404).json({ error: 'not found' });
   });
   router.delete('/api/stories/:id', (req, res) => res.json({ ok: removeStory(req.params.id) }));
+  router.patch('/api/stories/:id', (req, res) => {
+    const updated = patchStoryMeta(req.params.id, req.body || {});
+    return updated ? res.json(updated) : res.status(404).json({ error: 'not found' });
+  });
   router.get('/api/stories/:id/cover', (req, res) => {
     const f = storyFile(req.params.id, 'cover.png');
     if (!f) return res.status(404).end();
@@ -69,6 +73,41 @@ export function storybookRouter() {
       res.json({ engine, url, configured: true, ok: true, status: s.status });
     } catch (err) {
       res.json({ engine, url, configured: true, ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // ── Conversation reset (clear server-side history for a tab) ─────────────────
+  router.post('/api/v1/conversation/reset/:id', (req, res) => {
+    resetConversation(req.params.id);
+    res.json({ ok: true });
+  });
+
+  // ── Alternative PDF formats ───────────────────────────────────────────────────
+  // GET /api/stories/:id/pdf/a4  — A4 single pages (text left, image right)
+  // GET /api/stories/:id/pdf/1by1 — A4 single pages alternating text then image
+  router.post('/api/stories/:id/pdf/format', async (req, res) => {
+    try {
+      const rec = getStory(req.params.id);
+      if (!rec) return res.status(404).json({ error: 'not found' });
+      const { format = 'default', layout = 'spread' } = req.body || {};
+      // load images from disk
+      const coverPath = storyFile(req.params.id, 'cover.png');
+      const coverB64 = coverPath ? fs.readFileSync(coverPath).toString('base64') : '';
+      const pageImages = (rec.story?.scenes || []).map((_, i) => {
+        const f = storyFile(req.params.id, `page-${i + 1}.png`);
+        return f ? fs.readFileSync(f).toString('base64') : '';
+      });
+      const spec = layout === '1by1'
+        ? { pageKind: 'single', aspect: '1:1' }
+        : { pageKind: 'spread', aspect: '2:1' };
+      const opts = format === 'a4' ? { pageSize: 'A4' } : {};
+      const pdfBytes = await buildFromTemplate(spec, rec.story, pageImages, coverB64, opts);
+      const name = `${(rec.title || 'storybook').replace(/[^a-z0-9]+/gi, '_').toLowerCase()}_${format}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+      res.send(Buffer.from(pdfBytes));
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 
@@ -111,7 +150,10 @@ export function storybookRouter() {
       steps: engineOpts.steps,
       negativePrompt: engineOpts.negativePrompt,
     };
-    const genImage = (prompt, extra = {}) => engineGenerate(engine, engineUrl, prompt, { ...imgOpts, ...extra });
+    const genImage = (prompt, extra = {}) => engineGenerateStream(
+      engine, engineUrl, prompt, { ...imgOpts, ...extra },
+      (step) => send({ type: 'gen_step', step: step.step, total: step.total, pct: step.pct, elapsed_s: step.elapsed_s, it_s: step.it_s, prompt: step.prompt_used || prompt.slice(0, 80), seed: step.seed, config: step.config }),
+    );
 
     try {
       // 1. Ensure model loaded (skippable via AI Features)
@@ -184,6 +226,21 @@ export function storybookRouter() {
     } catch (err) {
       send({ type: 'error', message: err instanceof Error ? err.message : String(err) });
       res.end();
+    }
+  });
+
+  // ── Rebuild PDF after a re-roll (cover or page) ────────────────────────────
+  router.post('/api/storybook/rebuild-pdf', async (req, res) => {
+    try {
+      const { story, cover, pages: pageImages, spec } = req.body || {};
+      if (!story) return res.status(400).json({ error: 'story required' });
+      const pdfBytes = await buildFromTemplate(spec || {}, story, pageImages || [], cover || '');
+      const pdfB64 = Buffer.from(pdfBytes).toString('base64');
+      const safe = (story.title || 'storybook').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
+      const filename = `${safe}_${Date.now()}.pdf`;
+      res.json({ pdf_base64: pdfB64, filename });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
 

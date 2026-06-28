@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 
 export interface AiFeatures {
-  magicPrompt: boolean;     // RunPod magic-prompt enhancement
-  speechBubbles: boolean;   // ask the author for speech/thought bubbles
-  autoLoadModel: boolean;   // warm the RunPod model before generating
+  magicPrompt: boolean;
+  speechBubbles: boolean;
+  autoLoadModel: boolean;
 }
 
 export const ACCENTS: { name: string; accent: string; accent2: string; accent3: string }[] = [
@@ -15,13 +15,22 @@ export const ACCENTS: { name: string; accent: string; accent2: string; accent3: 
 
 const KEY = 'storybook.prefs.v1';
 
-interface Prefs {
-  accent: string;        // accent name
+export interface Prefs {
+  accent: string;
   features: AiFeatures;
+  readerMode: 'classic' | 'pageflip';
+  showCover: boolean;
+  flipShadow: boolean;
+  flipSpeed: number;
 }
+
 const DEFAULTS: Prefs = {
   accent: 'Amber',
   features: { magicPrompt: true, speechBubbles: true, autoLoadModel: true },
+  readerMode: 'classic',
+  showCover: true,
+  flipShadow: true,
+  flipSpeed: 900,
 };
 
 function load(): Prefs {
@@ -37,18 +46,38 @@ export function applyAccent(name: string) {
   root.setProperty('--story-accent-3', a.accent3);
 }
 
-interface PrefsState extends Prefs {
+interface PrefsState {
+  prefs: Prefs;
   setAccent: (name: string) => void;
   setFeature: (k: keyof AiFeatures, v: boolean) => void;
+  set: <K extends keyof Prefs>(k: K, v: Prefs[K]) => void;
+  save: () => Promise<void>;
 }
+
+function persist(p: Prefs) { try { localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* */ } }
 
 export const usePrefsStore = create<PrefsState>((set, get) => {
   const init = load();
   if (typeof document !== 'undefined') applyAccent(init.accent);
-  const persist = (p: Prefs) => { try { localStorage.setItem(KEY, JSON.stringify(p)); } catch { /* */ } };
   return {
-    ...init,
-    setAccent: (name) => { applyAccent(name); set({ accent: name }); persist({ accent: name, features: get().features }); },
-    setFeature: (k, v) => { const features = { ...get().features, [k]: v }; set({ features }); persist({ accent: get().accent, features }); },
+    prefs: init,
+    setAccent: (name) => {
+      applyAccent(name);
+      const prefs = { ...get().prefs, accent: name };
+      set({ prefs });
+      persist(prefs);
+    },
+    setFeature: (k, v) => {
+      const prefs = { ...get().prefs, features: { ...get().prefs.features, [k]: v } };
+      set({ prefs });
+      persist(prefs);
+    },
+    set: (k, v) => {
+      if (k === 'accent' && typeof v === 'string') applyAccent(v);
+      const prefs = { ...get().prefs, [k]: v };
+      set({ prefs });
+      persist(prefs);
+    },
+    save: async () => { persist(get().prefs); },
   };
 });

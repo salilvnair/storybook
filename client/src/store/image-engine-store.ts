@@ -12,14 +12,15 @@ export interface EngineMeta {
   label: string;
   blurb: string;
   accent: string;
-  options: { magic: boolean; preset: boolean; negativePrompt: boolean; steps: boolean };
+  options: { magic: boolean; preset: boolean; negativePrompt: boolean; steps: boolean; model?: boolean };
   presets: string[];
+  models: string[];
 }
 
 export interface ImageConfig {
   engine: string;
   urls: Record<string, string>;
-  options: { magic: boolean; preset: string; steps: number | null; negativePrompt: string; aspect_ratio: string };
+  options: { magic: boolean; preset: string; steps: number | null; negativePrompt: string; aspect_ratio: string; model: string };
 }
 
 const STORAGE_KEY = 'storybook.imageEngine.v1';
@@ -27,7 +28,7 @@ const STORAGE_KEY = 'storybook.imageEngine.v1';
 const DEFAULT_CONFIG: ImageConfig = {
   engine: 'ideogram4',
   urls: {},
-  options: { magic: true, preset: 'DEFAULT', steps: null, negativePrompt: '', aspect_ratio: '1:1' },
+  options: { magic: true, preset: 'DEFAULT', steps: null, negativePrompt: '', aspect_ratio: '1:1', model: '' },
 };
 
 function load(): ImageConfig {

@@ -4,6 +4,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,7 +34,7 @@ loadEnv();
 export const config = {
   port: parseInt(process.env.PORT || '8787', 10),
   root: ROOT,
-  outputDir: path.join(ROOT, 'server', 'output'),
+  outputDir: path.join(process.env.HOME || os.homedir(), '.salilvnair', 'istorybook', 'output'),
 
   llm: {
     baseUrl: process.env.LLM_BASE_URL || 'https://api.deepseek.com/v1/chat/completions',

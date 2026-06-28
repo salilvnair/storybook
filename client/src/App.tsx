@@ -98,7 +98,7 @@ export default function App() {
           if (tab.type === 'story') {
             return (
               <div key={tab.id} className="story-tab-pane" style={{ display: isActive ? 'flex' : 'none' }}>
-                <StoryTab />
+                <StoryTab tabId={tab.id} />
               </div>
             );
           }
