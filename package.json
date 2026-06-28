@@ -1,0 +1,40 @@
+{
+  "name": "storybook",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Chat with an AI to co-write a children's story, then generate a fully illustrated storybook PDF via self-hosted Ideogram 4 on RunPod.",
+  "scripts": {
+    "server": "node server/index.js",
+    "server:watch": "node --watch server/index.js",
+    "client": "vite --config client/vite.config.ts",
+    "dev": "concurrently -n server,client -c magenta,cyan \"npm run server:watch\" \"npm run client\"",
+    "build": "vite build --config client/vite.config.ts",
+    "start": "node server/index.js"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@salilvnair/convengine-chat": "^1.0.7",
+    "@salilvnair/dui": "file:../dui",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "monaco-editor": "^0.55.1",
+    "pdf-lib": "^1.17.1",
+    "sql.js": "^1.12.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "zustand": "^5.0.4"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.11",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@types/sql.js": "^1.4.9",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.7.3",
+    "vite": "^6.3.5"
+  }
+}
