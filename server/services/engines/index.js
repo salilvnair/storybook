@@ -1,7 +1,7 @@
 /**
  * Image-generation engine abstraction.
  *
- * Storybook Buddy talks to a *generic* image engine over HTTP — it never knows
+ * iStorybook talks to a *generic* image engine over HTTP — it never knows
  * the model implementation. Each engine is a provider that maps our generic
  * request to that engine's `/generate` body. The actual model runs wherever the
  * user points the URL: a Mac (mflux, Apple-Silicon) or RunPod (CUDA). Both

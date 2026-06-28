@@ -865,6 +865,16 @@ body {
 .ie-opt-text { flex: 1; min-width: 0; }
 .ie-opt-label { font-size: 12px; font-weight: 600; color: var(--color-text-primary); }
 .ie-opt-desc { font-size: 10.5px; color: var(--color-text-muted); margin-top: 1px; }
+.ie-save-row { display: flex; align-items: center; gap: 12px; padding-top: 4px; flex-wrap: wrap; }
+.ie-save-hint { font-size: 11px; color: var(--color-text-muted); }
+
+/* ── Reusable Save button — green "Saved ✓" pop ── */
+.save-btn-wrap { display: inline-flex; }
+.save-btn-wrap.is-saved { animation: save-pop 0.4s cubic-bezier(.2,.8,.2,1); }
+.save-btn-wrap.is-saved button { box-shadow: 0 0 0 3px color-mix(in srgb, #34d399 35%, transparent), 0 6px 18px color-mix(in srgb, #34d399 40%, transparent) !important; }
+.save-btn-wrap.is-saved svg { animation: save-check 0.45s cubic-bezier(.2,.8,.2,1); }
+@keyframes save-pop { 0% { transform: scale(1); } 35% { transform: scale(1.07); } 100% { transform: scale(1); } }
+@keyframes save-check { 0% { transform: scale(0.2) rotate(-12deg); opacity: 0; } 60% { transform: scale(1.25) rotate(0); opacity: 1; } 100% { transform: scale(1); } }
 .bs-custom-provider-add-btn { margin-left: auto; }
 .bs-custom-provider-form {
   background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08);
@@ -1142,7 +1152,15 @@ body { background: var(--story-bg); }
 }
 .story-status-dot { width: 7px; height: 7px; border-radius: 50%; background: #64748b; }
 .story-status-dot.ok { background: #34d399; box-shadow: 0 0 8px #34d399; }
-.story-status-dot.bad { background: #f87171; }
+.story-status-dot.bad { background: #f87171; box-shadow: 0 0 8px color-mix(in srgb, #f87171 70%, transparent); }
+/* Plain provider·model label — no dot, mono model, subtle accent border. */
+.story-status-pill.is-plain {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; gap: 5px;
+  color: var(--color-text-primary);
+  border-color: color-mix(in srgb, var(--story-accent-3) 28%, var(--story-border));
+  background: color-mix(in srgb, var(--story-accent-3) 7%, transparent);
+}
+.story-pill-sep { color: var(--color-text-muted); }
 .story-icon-btn {
   width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--story-border);
   background: rgba(255,255,255,0.03); color: var(--color-text-secondary);
@@ -1159,7 +1177,7 @@ body { background: var(--story-bg); }
   min-height: 0; overflow: hidden;
   position: relative;
 }
-.story-pane-canvas { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.story-pane-canvas { flex: 1; width: 100%; height: 100%; min-width: 0; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 
 /* ─── Storybook-ready card (in chat) ─────────────────────────────────────── */
 .story-ready-card {
@@ -1232,8 +1250,15 @@ body { background: var(--story-bg); }
 .story-page-card:hover .story-page-reroll { opacity: 1; }
 .story-page-reroll:hover { background: color-mix(in srgb, var(--story-accent) 70%, black); }
 
-.story-page-card.is-cover { grid-column: 1 / -1; }
-.story-page-card.is-cover .story-page-img-wrap { aspect-ratio: 1/1; max-width: 280px; margin: 0 auto; }
+/* Cover — a centred, framed "book cover" hero card (not a wide empty box). */
+.story-page-card.is-cover {
+  grid-column: 1 / -1;
+  width: 100%; max-width: 360px; margin: 0 auto 6px;
+  border: 1px solid color-mix(in srgb, var(--story-accent) 38%, var(--story-border));
+  box-shadow: 0 14px 44px color-mix(in srgb, var(--story-accent-2) 24%, transparent);
+}
+.story-page-card.is-cover .story-page-img-wrap { aspect-ratio: 1/1; max-width: none; margin: 0; }
+.story-page-card.is-cover .story-page-num { color: var(--story-accent); }
 
 /* ─── Result / download bar ──────────────────────────────────────────────── */
 .story-result-bar {
@@ -1284,7 +1309,23 @@ body { background: var(--story-bg); }
 .story-chat-md .dui-mdv-root ul, .story-chat-md .dui-mdv-root ol { margin: 6px 0; padding-left: 20px; }
 .story-chat-md .dui-mdv-root li { margin: 2px 0; }
 .story-chat-md .dui-mdv-root li > p { margin: 0; }
-.story-chat-md .dui-mdv-root h1, .story-chat-md .dui-mdv-root h2, .story-chat-md .dui-mdv-root h3 { margin: 10px 0 4px; }
+.story-chat-md .dui-mdv-root h1, .story-chat-md .dui-mdv-root h2, .story-chat-md .dui-mdv-root h3 { margin: 12px 0 5px; font-weight: 800; line-height: 1.25; }
+.story-chat-md .dui-mdv-root h1 { font-size: 15px; color: var(--story-accent); }
+.story-chat-md .dui-mdv-root h2 { font-size: 14px; color: var(--story-accent); }
+.story-chat-md .dui-mdv-root h3 { font-size: 13px; color: var(--story-accent-2); }
+.story-chat-md .dui-mdv-root strong { color: #fff; font-weight: 700; }
+.story-chat-md .dui-mdv-root em { color: var(--story-accent-2); }
+.story-chat-md .dui-mdv-root a { color: var(--story-accent-3); }
+.story-chat-md .dui-mdv-root blockquote {
+  margin: 8px 0; padding: 7px 12px; border-radius: 0 9px 9px 0;
+  border-left: 3px solid var(--story-accent);
+  background: color-mix(in srgb, var(--story-accent) 10%, transparent);
+  color: var(--color-text-primary); font-style: italic;
+}
+.story-chat-md .dui-mdv-root blockquote p { margin: 0; }
+.story-chat-md .dui-mdv-root code { font-family: ui-monospace, monospace; font-size: 11.5px; padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--story-accent-3) 16%, transparent); color: var(--story-accent-3); }
+.story-chat-md .dui-mdv-root hr { border: none; border-top: 1px solid var(--story-border); margin: 10px 0; }
+.story-chat-md .dui-mdv-root li::marker { color: var(--story-accent); }
 
 /* ════════════════════════════════════════════════════════════════════════════
    TABBED SHELL (Daakia-style)
@@ -1664,6 +1705,8 @@ body { background: var(--story-bg); }
 .alx-block-body { padding: 8px 10px; border-radius: 8px; background: rgba(0,0,0,0.25); }
 .alx-block-pre { margin: 0; padding: 8px 10px; border-radius: 8px; background: rgba(0,0,0,0.25); font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; color: var(--color-text-primary); }
 .alx-loading { font-size: 11.5px; color: var(--color-text-muted); }
+/* JSON tree string values wrap so full audit content is always readable. */
+.dui_json-tree__value { white-space: pre-wrap; word-break: break-word; }
 
 /* ── Audit Config (daakia-ditto) ── */
 .acfg-root { flex: 1; width: 100%; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
@@ -1745,6 +1788,105 @@ body { background: var(--story-bg); }
 
 /* Providers panel */
 .prov-page { max-width: none; width: 100%; }
+
+/* ── Story Library — book-card shelf ── */
+.book-shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 18px; margin-top: 6px; }
+.book-card { position: relative; border-radius: 14px; overflow: hidden; cursor: pointer; background: var(--story-panel); border: 1px solid var(--story-border); transition: transform 160ms cubic-bezier(.2,.8,.2,1), box-shadow 160ms, border-color 160ms; }
+.book-card:hover { transform: translateY(-4px); border-color: color-mix(in srgb, var(--story-accent-3) 50%, transparent); box-shadow: 0 16px 40px color-mix(in srgb, var(--story-accent-2) 22%, transparent); }
+.book-card-cover { position: relative; aspect-ratio: 1/1; background: #0e0c12; overflow: hidden; }
+.book-card-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.book-card-spine { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: linear-gradient(180deg, rgba(255,255,255,0.25), rgba(0,0,0,0.25)); }
+.book-card-open { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; color: #fff; background: color-mix(in srgb, var(--story-accent-3) 55%, rgba(0,0,0,0.4)); opacity: 0; transition: opacity 160ms; }
+.book-card:hover .book-card-open { opacity: 1; }
+.book-card-meta { padding: 10px 12px 12px; }
+.book-card-title { font-size: 12.5px; font-weight: 800; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.book-card-sub { font-size: 10px; color: var(--color-text-muted); margin-top: 2px; }
+.book-card-chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+.book-card-actions { position: absolute; top: 8px; right: 8px; display: flex; gap: 4px; opacity: 0; transition: opacity 160ms; }
+.book-card:hover .book-card-actions { opacity: 1; }
+
+/* ── Two-page flip-book reader (drag a single leaf at the spine) ── */
+.bf-stage { display: flex; flex-direction: column; align-items: center; gap: 14px; min-height: 0; width: 100%; }
+
+/* The open book: a fixed LEFT page + RIGHT page, spine in the centre. */
+.bp-book {
+  position: relative; perspective: 2800px;
+  width: min(88vw, 760px); height: min(56vh, 440px);
+  display: flex; touch-action: none; user-select: none; cursor: grab;
+  filter: drop-shadow(0 22px 48px rgba(0,0,0,0.55));
+}
+.bp-book:active { cursor: grabbing; }
+.bp-page { position: relative; width: 50%; height: 100%; overflow: hidden; background: #fffdf3; }
+.bp-left { border-radius: 12px 0 0 12px; }
+.bp-right { border-radius: 0 12px 12px 0; }
+/* Closed book — front: only the cover (right); back: only the back cover (left). */
+.bp-page.bp-empty { background: transparent; box-shadow: none; }
+.bp-book.bp-closed-front, .bp-book.bp-closed-back { filter: drop-shadow(0 22px 48px rgba(0,0,0,0.6)); }
+.bp-book.bp-closed-front .bp-right {
+  border-radius: 12px;
+  box-shadow: inset 7px 0 14px rgba(0,0,0,0.28), 0 14px 36px rgba(0,0,0,0.45);
+}
+.bp-book.bp-closed-front .bp-right::after {
+  content: ''; position: absolute; left: 0; top: 3px; bottom: 3px; width: 5px; z-index: 3;
+  background: repeating-linear-gradient(90deg, rgba(0,0,0,0.12) 0 1px, rgba(255,255,255,0.5) 1px 2px);
+  border-radius: 3px 0 0 3px;
+}
+.bp-book.bp-closed-back .bp-left {
+  border-radius: 12px;
+  box-shadow: inset -7px 0 14px rgba(0,0,0,0.28), 0 14px 36px rgba(0,0,0,0.45);
+}
+.bp-book.bp-closed-back .bp-left::after {
+  content: ''; position: absolute; right: 0; top: 3px; bottom: 3px; width: 5px; z-index: 3;
+  background: repeating-linear-gradient(90deg, rgba(255,255,255,0.5) 0 1px, rgba(0,0,0,0.12) 1px 2px);
+  border-radius: 0 3px 3px 0;
+}
+/* Back cover face */
+.bp-backcover { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 24px;
+  background: radial-gradient(120% 90% at 50% 35%, #2a3550, #161d2e); color: #e7ecff; }
+.bp-bc-end { font-size: 22px; font-weight: 900; letter-spacing: 0.02em; color: #fff; }
+.bp-bc-title { font-size: 13px; font-weight: 700; color: #b9c4e6; }
+.bp-bc-mark { font-size: 11px; color: #7e8bb5; margin-top: 6px; }
+
+/* The turning leaf occupies the RIGHT page and pivots on the centre spine. */
+.bp-leaf {
+  position: absolute; top: 0; left: 50%; width: 50%; height: 100%; z-index: 5;
+  transform-origin: left center; transform-style: preserve-3d; will-change: transform;
+}
+.bp-leaf-face { position: absolute; inset: 0; overflow: hidden; background: #fffdf3;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.bp-leaf-front { border-radius: 0 12px 12px 0; box-shadow: 0 14px 36px rgba(0,0,0,0.4); }
+.bp-leaf-back { transform: rotateY(180deg); border-radius: 12px 0 0 12px; }
+.bp-shade { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, rgba(0,0,0,0.55), rgba(0,0,0,0) 65%); }
+
+/* Spine gutter shading on each inner edge — sells the open-book centre. */
+.bp-gutter { position: absolute; top: 0; bottom: 0; width: 26px; pointer-events: none; z-index: 2; }
+.bp-gutter-l { left: 0; background: linear-gradient(90deg, rgba(0,0,0,0.20), transparent); }
+.bp-gutter-r { right: 0; background: linear-gradient(270deg, rgba(0,0,0,0.20), transparent); }
+
+/* Illustration (right) — shown FULL on paper, never cropped/cut off. */
+.bp-art { width: 100%; height: 100%; background: #fffdf3; display: flex; align-items: center; justify-content: center; }
+.bp-art img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; transition: opacity 200ms; }
+
+/* Text page (left) */
+.bp-text { width: 100%; height: 100%; padding: 22px 24px; color: #2e2426; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.bp-num { font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: #b08968; }
+.bp-stitle { font-size: 18px; font-weight: 800; color: #3a2e28; }
+.bp-narr { font-size: 14.5px; line-height: 1.65; color: #4a3f39; margin: 0; }
+.bp-bubble { font-size: 12.5px; padding: 7px 12px; border-radius: 12px; width: fit-content; max-width: 100%; }
+.bp-says { background: #fff; border: 1.5px solid #e8c9a0; color: #3a2e28; }
+.bp-thinks { background: #f3edff; border: 1.5px dashed #c9b8e8; color: #4a3f5a; font-style: italic; }
+
+/* Title page (left of the cover spread) */
+.bp-title { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px; padding: 24px; background: radial-gradient(120% 90% at 50% 30%, #fffef7, #f6ecd6); }
+.bp-title-kicker { font-size: 10px; font-weight: 800; letter-spacing: 0.16em; text-transform: uppercase; color: #b08968; }
+.bp-title-name { font-size: 22px; font-weight: 900; color: #3a2e28; line-height: 1.15; }
+.bp-title-by { font-size: 11px; color: #8a7a6a; }
+
+.bf-footer { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.bf-hint { font-size: 10.5px; color: var(--color-text-muted); letter-spacing: 0.04em; }
+.bf-dots { display: flex; gap: 6px; }
+.bf-dot { width: 8px; height: 8px; border-radius: 50%; border: none; background: var(--story-border); cursor: pointer; padding: 0; transition: background 140ms, transform 140ms; }
+.bf-dot.on { background: var(--story-accent-3); transform: scale(1.3); }
 
 /* ── General tab — stat cards + about + danger zone ── */
 .gen-page { display: flex; flex-direction: column; gap: 16px; }

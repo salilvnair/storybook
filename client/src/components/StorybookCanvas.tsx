@@ -5,7 +5,6 @@
 import { ButtonView } from '@salilvnair/dui';
 import { useStoryStore } from '../store/story-store';
 import { useTemplatesStore } from '../store/templates-store';
-import { useSettingsStore } from '../store/settings-store';
 import { TemplateSchematic } from './template/TemplateSchematic';
 
 function dataUri(b64: string) {
@@ -13,10 +12,10 @@ function dataUri(b64: string) {
 }
 
 export function StorybookCanvas() {
-  const { story, phase, progress, cover, pages, warns, error, pdfBase64, pdfFilename, reset, regenerating, regeneratePage } = useStoryStore();
+  const { story, phase, progress, cover, pages, warns, error, pdfBase64, pdfFilename, reset, regenerating, regeneratePage, regeneratingCover, regenerateCover } = useStoryStore();
   const defaultSpec = useTemplatesStore((s) => s.defaultSpec());
   const savedCount = useTemplatesStore((s) => s.saved.length);
-  const runpodUrl = useSettingsStore((s) => s.settings.runpodUrl);
+  const canReroll = (phase === 'done' || phase === 'error') && regenerating === null && !regeneratingCover;
 
   const downloadPdf = () => {
     if (!pdfBase64) return;
@@ -63,7 +62,7 @@ export function StorybookCanvas() {
               <TemplateSchematic spec={defaultSpec} labels />
             </div>
             <div className="story-empty-text" style={{ marginTop: 16 }}>
-              Chat with Storybook Buddy on the left to dream up a story. When it's ready,
+              Chat with iStorybook on the left to dream up a story. When it's ready,
               hit <b>✨ Generate Storybook</b> and each page is illustrated into this layout.
             </div>
           </div>
@@ -99,13 +98,25 @@ export function StorybookCanvas() {
             {(cover || busy) && (
               <div className="story-page-card is-cover">
                 <div className="story-page-img-wrap">
-                  {cover ? (
+                  {regeneratingCover ? (
+                    <div className="story-page-img-loading">
+                      <span className="story-progress-spinner" />
+                      <span>Re-rolling cover…</span>
+                    </div>
+                  ) : cover ? (
                     <img src={dataUri(cover)} alt="Cover" />
                   ) : (
                     <div className="story-page-img-loading">
                       <span className="story-progress-spinner" />
                       <span>Painting the cover…</span>
                     </div>
+                  )}
+                  {canReroll && cover && (
+                    <button
+                      className="story-page-reroll"
+                      title="Regenerate the cover art"
+                      onClick={() => void regenerateCover()}
+                    >🔄</button>
                   )}
                 </div>
                 <div className="story-page-meta">
@@ -132,11 +143,11 @@ export function StorybookCanvas() {
                     </div>
                   )}
                   {/* Per-scene re-roll (S2.02) — shown once the book is done */}
-                  {(phase === 'done' || phase === 'error') && regenerating === null && (
+                  {canReroll && page.image_b64 && (
                     <button
                       className="story-page-reroll"
                       title="Regenerate just this page's art"
-                      onClick={() => void regeneratePage(page.index, runpodUrl ? { runpodUrl } : undefined)}
+                      onClick={() => void regeneratePage(page.index)}
                     >🔄</button>
                   )}
                 </div>

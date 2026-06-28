@@ -49,6 +49,7 @@ export const StarIcon = (p: IconProps) => (
 );
 export const ChevronRightIcon = (p: IconProps) => (<Svg {...p}><path d="M9 6l6 6-6 6" /></Svg>);
 export const ChevronLeftIcon = (p: IconProps) => (<Svg {...p}><path d="M15 6l-6 6 6 6" /></Svg>);
+export const CheckIcon = (p: IconProps) => (<Svg {...p}><path d="M20 6 9 17l-5-5" /></Svg>);
 export const CopyIcon = (p: IconProps) => (
   <Svg {...p}><rect x="9" y="9" width="11" height="11" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></Svg>
 );

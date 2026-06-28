@@ -77,6 +77,14 @@ async function open(): Promise<Database> {
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS stories (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      page_count INTEGER NOT NULL DEFAULT 0,
+      chat_model TEXT,
+      image_engine TEXT,
+      created_at TEXT NOT NULL
+    );
   `);
   return db;
 }

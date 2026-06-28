@@ -4,6 +4,7 @@ import { usePrefsStore, type AiFeatures } from '../../store/prefs-store';
 import { ThemeCards } from './ThemeCards';
 import { useTemplatesStore } from '../../store/templates-store';
 import { useProvidersStore } from '../../store/providers-store';
+import { useSettingsStore } from '../../store/settings-store';
 import { usePalettesStore } from '../../store/palettes-store';
 import { useThemesStore } from '../../store/themes-store';
 import { useImageEngineStore } from '../../store/image-engine-store';
@@ -11,7 +12,10 @@ import { BookIcon, CpuIcon, PaletteIcon, SparkleIcon, TrashIcon } from '../../ic
 
 export function GeneralPanel() {
   const templates = useTemplatesStore((s) => s.saved.length);
-  const providers = useProvidersStore((s) => s.providers.length);
+  const customProviders = useProvidersStore((s) => s.providers.length);
+  const llmConfigured = useSettingsStore((s) => !!s.serverConfig?.llmConfigured);
+  // Count the active server .env provider as 1 when there are no custom ones.
+  const providers = customProviders > 0 ? customProviders : (llmConfigured ? 1 : 0);
   const palettes = usePalettesStore((s) => s.palettes.length);
   const themes = useThemesStore((s) => s.themes.length);
   const engine = useImageEngineStore((s) => s.current());
@@ -27,7 +31,7 @@ export function GeneralPanel() {
     <div className="story-tab-scroll">
       <div className="prov-page gen-page">
         <div className="prov-section-head"><span style={{ fontSize: 15 }}>📖</span><h2 className="story-settings-h2" style={{ margin: 0 }}>General</h2></div>
-        <p className="story-settings-lead">Your Storybook Buddy workspace at a glance.</p>
+        <p className="story-settings-lead">Your iStorybook workspace at a glance.</p>
 
         {/* Live stat cards */}
         <div className="gen-stats">
@@ -41,7 +45,7 @@ export function GeneralPanel() {
         <div className="gen-card">
           <div className="gen-card-title">✨ About</div>
           <div className="gen-rows">
-            <div className="gen-row"><span className="gen-k">App</span><ChipView size="sm" color="#f59e0b" label="Storybook Buddy" /></div>
+            <div className="gen-row"><span className="gen-k">App</span><ChipView size="sm" color="#f59e0b" label="iStorybook" /></div>
             <div className="gen-row"><span className="gen-k">Version</span><ChipView size="sm" color="#34d399" label={`v${version}`} /></div>
             <div className="gen-row"><span className="gen-k">Image engine</span><ChipView size="sm" color={engine?.accent || '#8b5cf6'} label={engine?.label || '—'} /></div>
             <div className="gen-row"><span className="gen-k">Database</span><ChipView size="sm" color="#22d3ee" label="local sql.js · this browser" /></div>

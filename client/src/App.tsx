@@ -13,7 +13,9 @@ import { useTemplatesStore } from './store/templates-store';
 import { useProvidersStore } from './store/providers-store';
 import { useImageEngineStore } from './store/image-engine-store';
 import { useThemesStore } from './store/themes-store';
+import { usePalettesStore } from './store/palettes-store';
 import { PaletteIcon, BookIcon, SettingsIcon } from './icons';
+import { BrandLogo } from './components/BrandLogo';
 
 export default function App() {
   const tabs = useTabsStore((s) => s.tabs);
@@ -24,6 +26,9 @@ export default function App() {
   const fetchServerConfig = useSettingsStore((s) => s.fetchServerConfig);
   const loadTemplates = useTemplatesStore((s) => s.load);
   const loadProviders = useProvidersStore((s) => s.load);
+  const activeProvider = useProvidersStore((s) => s.providers.find((p) => p.isActive));
+  const imgHealth = useImageEngineStore((s) => s.health);
+  const imgEngine = useImageEngineStore((s) => s.engines.find((e) => e.id === s.config.engine));
 
   // Disable the browser's native context menu app-wide — only our DUI
   // ContextMenuView (wired via onContextMenu handlers) should ever appear.
@@ -39,7 +44,8 @@ export default function App() {
     void loadProviders();
     void useImageEngineStore.getState().init();
     void useThemesStore.getState().load();
-    const id = setInterval(() => void fetchServerConfig(), 15000);
+    void usePalettesStore.getState().load();
+    const id = setInterval(() => { void fetchServerConfig(); void useImageEngineStore.getState().checkHealth(); }, 15000);
     void usePromptsStore.getState().load();
     return () => clearInterval(id);
     // Mount-once startup loads (stable zustand actions).
@@ -47,26 +53,38 @@ export default function App() {
   }, []);
 
   const llmOk = !!serverConfig?.llmConfigured;
-  const runpodOk = !!serverConfig?.runpodConfigured;
 
   return (
     <div className="story-app">
       <header className="story-hero">
-        <div className="story-hero-badge">📖</div>
+        <div className="story-hero-badge"><BrandLogo size={26} /></div>
         <div className="story-hero-titles">
-          <div className="story-hero-title">Story<span className="accent">book</span> Buddy</div>
+          <div className="story-hero-title"><span className="accent">i</span>Storybook</div>
           <div className="story-hero-sub">Chat to dream up a tale · illustrate it with AI · download a printable picture book</div>
         </div>
         <div className="story-hero-actions">
           <ButtonView size="sm" variant="secondary" iconLeft={<PaletteIcon size={14} />} onClick={() => open('templates')}>Templates</ButtonView>
           <ButtonView size="sm" variant="secondary" iconLeft={<BookIcon size={14} />} onClick={() => open('library')}>Library</ButtonView>
-          <span className="story-status-pill" title="Language model status">
-            <span className={`story-status-dot ${llmOk ? 'ok' : 'bad'}`} />
-            {serverConfig?.llmModel || 'LLM'}
+          {/* Provider · Model — plain label, no status dot */}
+          <span className="story-status-pill is-plain" title="Active LLM provider · model">
+            {(activeProvider?.name || (serverConfig?.llmModel ? 'server .env' : 'No provider'))}
+            <span className="story-pill-sep">·</span>
+            {(activeProvider?.model || serverConfig?.llmModel || '—')}
           </span>
-          <span className="story-status-pill" title="Image server status">
-            <span className={`story-status-dot ${runpodOk ? 'ok' : 'bad'}`} />
-            RunPod
+          {/* chat-engine — green dot if an LLM is configured */}
+          <span className="story-status-pill" title={llmOk ? 'Chat engine ready' : 'Chat engine not configured'}>
+            <span className={`story-status-dot ${llmOk ? 'ok' : 'bad'}`} />
+            chat-engine
+          </span>
+          {/* image-engine — green if the configured URL is reachable, red otherwise */}
+          <span
+            className="story-status-pill"
+            title={imgHealth.ok ? `${imgEngine?.label || 'Image engine'} reachable${imgHealth.status ? ` (${imgHealth.status})` : ''}` : imgHealth.configured ? `${imgEngine?.label || 'Image engine'} URL set but unreachable` : 'Image engine URL not configured — set it in Settings → Providers'}
+            onClick={() => open('settings')}
+            style={{ cursor: 'pointer' }}
+          >
+            <span className={`story-status-dot ${imgHealth.ok ? 'ok' : 'bad'}`} />
+            image-engine
           </span>
           <IconButtonView size="md" tooltip="Settings" icon={<SettingsIcon size={15} />} onClick={() => open('settings')} />
         </div>

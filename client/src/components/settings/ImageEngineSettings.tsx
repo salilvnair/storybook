@@ -8,9 +8,10 @@
 import { useEffect } from 'react';
 import { SelectInputView, TextInputView, ToggleSwitchView, ChipView, type SelectOption } from '@salilvnair/dui';
 import { useImageEngineStore } from '../../store/image-engine-store';
+import { SaveButton } from '../SaveButton';
 
 export function ImageEngineSettings() {
-  const { engines, config, loaded, init, setEngine, setUrl, setOption, current } = useImageEngineStore();
+  const { engines, config, loaded, init, setEngine, setUrl, setOption, save, current } = useImageEngineStore();
 
   useEffect(() => { if (!loaded) void init(); }, [loaded, init]);
 
@@ -102,6 +103,12 @@ export function ImageEngineSettings() {
           )}
         </div>
       )}
+
+      {/* Explicit save — settings auto-apply, but the button confirms + re-syncs the engine to the server. */}
+      <div className="ie-save-row">
+        <SaveButton onSave={save} label="Save engine settings" />
+        <span className="ie-save-hint">{url ? `Active: ${eng?.label} → ${url}` : 'Set a URL above (local Mac or RunPod) to enable generation.'}</span>
+      </div>
     </div>
   );
 }

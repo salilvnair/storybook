@@ -117,7 +117,7 @@ export function AiAudit() {
           <div className="aa-empty-state">
             <SparkleIcon size={24} style={{ color: 'var(--color-text-muted)', opacity: 0.4 }} />
             <span>No AI audit records yet</span>
-            <span className="aa-empty-sub">Chat with Storybook Buddy to record LLM calls here.</span>
+            <span className="aa-empty-sub">Chat with iStorybook to record LLM calls here.</span>
           </div>
         ) : (
           <table className="aa-grid">

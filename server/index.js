@@ -50,7 +50,7 @@ if (fs.existsSync(clientDist)) {
 }
 
 app.listen(config.port, () => {
-  console.log(`\n  📖 Storybook server  →  http://localhost:${config.port}`);
+  console.log(`\n  📖 iStorybook server  →  http://localhost:${config.port}`);
   console.log(`     LLM    : ${isLlmConfigured() ? `✓ ${config.llm.model}` : '✗ not configured (set LLM_API_KEY in .env)'}`);
   console.log(`     RunPod : ${isRunpodConfigured() ? `✓ ${config.runpod.url}` : '✗ not configured (set RUNPOD_URL in .env)'}\n`);
 });

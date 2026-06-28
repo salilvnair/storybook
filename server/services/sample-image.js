@@ -38,7 +38,7 @@ export const SAMPLE_SCENE_IMAGES = [
 
 export const SAMPLE_STORY = {
   title: 'The Brave Little Turtle',
-  author: 'A Storybook Buddy Tale',
+  author: 'A iStorybook Tale',
   scenes: [
     { index: 1, title: 'A Tiny Turtle', narration: 'Tilly the turtle was very small. But her heart was very big.', says: 'I can do it!' },
     { index: 2, title: 'The Big Pond', narration: 'The pond looked deep and wide today.', says: 'Whoa, so big!' },

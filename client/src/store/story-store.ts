@@ -1,7 +1,32 @@
 import { create } from 'zustand';
 import { useTemplatesStore } from './templates-store';
 import { usePrefsStore } from './prefs-store';
-import { audit } from '../db/sqldb';
+import { useImageEngineStore } from './image-engine-store';
+import { useProvidersStore } from './providers-store';
+import { useSettingsStore } from './settings-store';
+import { audit, run } from '../db/sqldb';
+
+/**
+ * The image-engine override the client sends with every generation — the client
+ * is the source of truth, so generation works even if the (stateless) server
+ * restarted and lost its in-memory image config.
+ */
+function engineOverride(extra?: { runpodUrl?: string }) {
+  const cfg = useImageEngineStore.getState().config;
+  return { engine: cfg.engine, url: cfg.urls[cfg.engine] || '', options: cfg.options, ...extra };
+}
+
+/** Which chat + image engine produced this book — saved alongside the bundle. */
+function genMeta() {
+  const eng = useImageEngineStore.getState();
+  const imageEngine = eng.engines.find((e) => e.id === eng.config.engine);
+  const active = useProvidersStore.getState().providers.find((p) => p.isActive);
+  const serverCfg = useSettingsStore.getState().serverConfig;
+  return {
+    chat: { provider: active?.name || (serverCfg?.llmModel ? 'server .env' : ''), model: active?.model || serverCfg?.llmModel || '' },
+    image: { engine: eng.config.engine, label: imageEngine?.label || eng.config.engine },
+  };
+}
 
 export interface Scene {
   index: number;
@@ -35,13 +60,16 @@ interface StoryState {
   error: string | null;
   pdfBase64: string | null;
   pdfFilename: string | null;
+  storyId: string | null;
 
   regenerating: number | null;
+  regeneratingCover: boolean;
 
   setStory: (s: Story) => void;
   reset: () => void;
   generate: (override?: { runpodUrl?: string }) => Promise<void>;
   regeneratePage: (index: number, override?: { runpodUrl?: string }) => Promise<void>;
+  regenerateCover: (override?: { runpodUrl?: string }) => Promise<void>;
 }
 
 export const useStoryStore = create<StoryState>((set, get) => ({
@@ -54,9 +82,29 @@ export const useStoryStore = create<StoryState>((set, get) => ({
   error: null,
   pdfBase64: null,
   pdfFilename: null,
+  storyId: null,
   regenerating: null,
+  regeneratingCover: false,
 
   setStory: (s) => set({ story: s }),
+
+  regenerateCover: async (override) => {
+    const story = get().story;
+    if (!story) return;
+    set({ regeneratingCover: true });
+    try {
+      const res = await fetch('/api/storybook/regenerate-cover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ story, override: engineOverride(override) }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      set({ cover: data.image_b64 || get().cover, regeneratingCover: false });
+    } catch (err) {
+      set({ regeneratingCover: false, warns: [...get().warns, `Re-roll cover: ${err instanceof Error ? err.message : String(err)}`] });
+    }
+  },
 
   regeneratePage: async (index, override) => {
     const story = get().story;
@@ -67,7 +115,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       const res = await fetch('/api/storybook/regenerate-scene', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scene, style: story?.style, override }),
+        body: JSON.stringify({ scene, style: story?.style, override: engineOverride(override) }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -89,6 +137,8 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       error: null,
       pdfBase64: null,
       pdfFilename: null,
+      storyId: null,
+      regeneratingCover: false,
     }),
 
   generate: async (override) => {
@@ -120,7 +170,7 @@ export const useStoryStore = create<StoryState>((set, get) => ({
       const res = await fetch('/api/storybook/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ story, override, spec, features }),
+        body: JSON.stringify({ story, override: engineOverride(override), spec, features, meta: genMeta() }),
       });
       if (!res.ok || !res.body) throw new Error(`Server error ${res.status}`);
 
@@ -171,9 +221,19 @@ function handleEvent(evt: any, set: any, get: any) {
     case 'warn':
       set({ warns: [...get().warns, evt.message] });
       break;
-    case 'done':
-      set({ phase: 'done', pdfBase64: evt.pdf_base64, pdfFilename: evt.filename, progress: { step: 1, total: 1, pct: 100, label: 'Storybook ready!' } });
+    case 'done': {
+      set({ phase: 'done', pdfBase64: evt.pdf_base64, pdfFilename: evt.filename, storyId: evt.storyId || null, progress: { step: 1, total: 1, pct: 100, label: 'Storybook ready!' } });
+      // Mirror a DB row pointing to the saved bundle (daakia-style; visible in DB Explorer).
+      const st = get().story;
+      if (evt.storyId && st) {
+        const m = genMeta();
+        void run('INSERT OR REPLACE INTO stories (id, title, page_count, chat_model, image_engine, created_at) VALUES (?,?,?,?,?,?)', [
+          evt.storyId, st.title, st.scenes.length, m.chat.model, m.image.label, new Date().toISOString(),
+        ]);
+        void audit('story.done', `Saved "${st.title}" (${st.scenes.length} pages)`, { id: evt.storyId, image: m.image.label });
+      }
       break;
+    }
     case 'error':
       set({ phase: 'error', error: evt.message });
       break;

@@ -11,8 +11,9 @@ import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
-import { ensureLoaded, generate as engineGenerate, engineList } from '../services/engines/index.js';
+import { ensureLoaded, generate as engineGenerate, engineList, status as engineStatus, getEngine } from '../services/engines/index.js';
 import { resolveImageConfig, getImageConfig, setImageConfig } from '../store/image-config.js';
+import { saveStory, listStories, getStory, storyFile, removeStory } from '../store/story-library.js';
 import { buildScenePrompt } from '../services/storyAgent.js';
 import { buildFromTemplate } from '../services/pdf-from-template.js';
 import { getConversation } from '../store/conversations.js';
@@ -28,8 +29,51 @@ export function storybookRouter() {
   router.get('/api/image-config', (_req, res) => res.json(getImageConfig()));
   router.post('/api/image-config', (req, res) => res.json({ ok: true, config: setImageConfig(req.body || {}) }));
 
+  // ── Story Library (persisted bundles in ~/.salilvnair/istorybook/story) ──────
+  router.get('/api/stories', (_req, res) => res.json(listStories()));
+  router.get('/api/stories/:id', (req, res) => {
+    const rec = getStory(req.params.id);
+    return rec ? res.json(rec) : res.status(404).json({ error: 'not found' });
+  });
+  router.delete('/api/stories/:id', (req, res) => res.json({ ok: removeStory(req.params.id) }));
+  router.get('/api/stories/:id/cover', (req, res) => {
+    const f = storyFile(req.params.id, 'cover.png');
+    if (!f) return res.status(404).end();
+    res.setHeader('Content-Type', 'image/png');
+    fs.createReadStream(f).pipe(res);
+  });
+  router.get('/api/stories/:id/page/:n', (req, res) => {
+    const f = storyFile(req.params.id, `page-${parseInt(req.params.n, 10)}.png`);
+    if (!f) return res.status(404).end();
+    res.setHeader('Content-Type', 'image/png');
+    fs.createReadStream(f).pipe(res);
+  });
+  router.get('/api/stories/:id/pdf', (req, res) => {
+    const f = storyFile(req.params.id, 'book.pdf');
+    if (!f) return res.status(404).end();
+    const rec = getStory(req.params.id);
+    const name = `${(rec?.title || 'storybook').replace(/[^a-z0-9]+/gi, '_').toLowerCase()}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+    fs.createReadStream(f).pipe(res);
+  });
+
+  // Health of the configured image engine — pings its /status so the header dot
+  // can show green (reachable) / red (no URL or unreachable).
+  router.get('/api/image-config/health', async (_req, res) => {
+    const { engine, url } = resolveImageConfig();
+    const configured = !!url && !url.includes('REPLACE') && !url.includes('xxxxx');
+    if (!configured) return res.json({ engine, configured: false, ok: false });
+    try {
+      const s = await engineStatus(url);
+      res.json({ engine, url, configured: true, ok: true, status: s.status });
+    } catch (err) {
+      res.json({ engine, url, configured: true, ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   router.post('/api/storybook/generate', async (req, res) => {
-    const { story: bodyStory, conversationId, override, spec, features } = req.body || {};
+    const { story: bodyStory, conversationId, override, spec, features, meta: clientMeta } = req.body || {};
     const story = bodyStory || (conversationId ? getConversation(conversationId).story : null);
     const ft = features || { magicPrompt: true, autoLoadModel: true };
 
@@ -117,12 +161,25 @@ export function storybookRouter() {
       const pdfBytes = await buildFromTemplate(spec || {}, story, sceneImages, coverB64);
       const pdfB64 = Buffer.from(pdfBytes).toString('base64');
 
-      // Save to disk
+      // Save to disk (flat PDF — back-compat with the old library list)
       const safe = (story.title || 'storybook').replace(/[^a-z0-9]+/gi, '_').toLowerCase();
       const filename = `${safe}_${Date.now()}.pdf`;
       try { fs.writeFileSync(path.join(config.outputDir, filename), Buffer.from(pdfBytes)); } catch { /* ignore */ }
 
-      send({ type: 'done', pdf_base64: pdfB64, filename, title: story.title });
+      // Persist the full bundle to ~/.salilvnair/istorybook/story/<uuid>/ + meta.
+      let savedId = null;
+      try {
+        const rec = saveStory({
+          story, cover: coverB64, pages: sceneImages, pdfB64,
+          meta: {
+            chat: clientMeta?.chat || null,
+            image: clientMeta?.image || { engine, label: getEngine(engine)?.label },
+          },
+        });
+        savedId = rec.id;
+      } catch { /* non-fatal */ }
+
+      send({ type: 'done', pdf_base64: pdfB64, filename, title: story.title, storyId: savedId });
       res.end();
     } catch (err) {
       send({ type: 'error', message: err instanceof Error ? err.message : String(err) });
@@ -142,6 +199,30 @@ export function storybookRouter() {
       const img = await engineGenerate(engine, url, prompt, {
         aspect_ratio: options.aspect_ratio || '1:1', magic: options.magic, preset: options.preset,
         steps: options.steps, negativePrompt: options.negativePrompt,
+      });
+      res.json({ image_b64: img.image_b64, seed: img.seed });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // ── Regenerate the cover image ──────────────────────────────────────────────
+  router.post('/api/storybook/regenerate-cover', async (req, res) => {
+    try {
+      const { story, override } = req.body || {};
+      if (!story) return res.status(400).json({ error: 'story required' });
+      const ov = getPromptOverrides();
+      const baseStyle = (ov.sceneStyle && ov.sceneStyle.trim()) ? ov.sceneStyle : story.style;
+      const style = (ov.sceneStyleUser && ov.sceneStyleUser.trim()) ? `${baseStyle}, ${ov.sceneStyleUser.trim()}` : baseStyle;
+      const sceneDesc = story.scenes?.[0]?.image_prompt || story.scenes?.[0]?.narration || '';
+      const coverBody = (ov.coverPrompt && ov.coverPrompt.trim())
+        ? ov.coverPrompt.replace(/\{\{title\}\}/g, story.title).replace(/\{\{scene\}\}/g, sceneDesc)
+        : `Children's picture book cover for "${story.title}". ${sceneDesc}`;
+      const coverStylePrefix = (ov.coverPromptStyle && ov.coverPromptStyle.trim()) ? `${ov.coverPromptStyle.trim()}. ` : '';
+      const prompt = `${coverStylePrefix}${coverBody}. Style: ${style}.`;
+      const { engine, url, options } = resolveImageConfig(override);
+      const img = await engineGenerate(engine, url, prompt, {
+        aspect_ratio: '1:1', magic: options.magic, preset: options.preset, steps: options.steps, negativePrompt: options.negativePrompt,
       });
       res.json({ image_b64: img.image_b64, seed: img.seed });
     } catch (err) {
