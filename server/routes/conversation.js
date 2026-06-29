@@ -95,8 +95,11 @@ export function conversationRouter() {
 
     // Use the Prompt Library override for the Story Author system prompt if set.
     const sysOverride = getPromptOverrides().storySystem;
+    const worldCtx = getPromptOverrides().worldContinuity;
+    const basePrompt = sysOverride && sysOverride.trim() ? sysOverride : buildSystemPrompt();
+    const finalPrompt = worldCtx && worldCtx.trim() ? `${basePrompt}\n\n${worldCtx}` : basePrompt;
     const messages = [
-      { role: 'system', content: sysOverride && sysOverride.trim() ? sysOverride : buildSystemPrompt() },
+      { role: 'system', content: finalPrompt },
       ...conv.messages.map((m) => ({ role: m.role, content: m.content })),
     ];
 

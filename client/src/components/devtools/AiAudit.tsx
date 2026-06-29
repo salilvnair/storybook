@@ -3,13 +3,35 @@
  * (#, Stage, Model, Duration, Created At). Clicking a row replaces the panel
  * with a full detail *view* (Back button + tabs: System Prompt / User Prompt /
  * Request / Response / Full Audit), exactly like daakia — not a modal.
+ *
+ * Persistence: on load, reads cached entries from sql.js immediately, then
+ * syncs the latest from the server. Full detail is cached in sql.js on first
+ * view so it survives server restarts.
  */
 import { useEffect, useState, useCallback } from 'react';
 import { JsonTreeView, CopyButtonView, IconButtonView, ButtonView } from '@salilvnair/dui';
 import { ChevronLeftIcon, RefreshIcon, TrashIcon, SparkleIcon } from '../../icons';
+import { all, syncAiAuditList, upsertAiAuditDetail, deleteAiAuditRow, clearAiAuditTable } from '../../db/sqldb';
+import type { SqlValue } from 'sql.js';
 
 interface Row { id: number; stage: string; model: string; ms: number; createdAt: string; error: boolean }
 interface Detail extends Row { system: string; user: string; request: unknown; response: unknown }
+
+interface SqlAuditRow {
+  id: SqlValue; stage: SqlValue; model: SqlValue; ms: SqlValue; created_at: SqlValue; is_error: SqlValue;
+  system_prompt?: SqlValue; user_prompt?: SqlValue; request_json?: SqlValue; response_json?: SqlValue;
+}
+
+function sqlToRow(r: SqlAuditRow): Row {
+  return { id: Number(r.id), stage: String(r.stage || ''), model: String(r.model || ''), ms: Number(r.ms || 0), createdAt: String(r.created_at), error: !!r.is_error };
+}
+function sqlToDetail(r: SqlAuditRow): Detail {
+  const tryParse = (v: SqlValue | undefined) => {
+    if (v == null) return null;
+    try { return JSON.parse(String(v)); } catch { return String(v); }
+  };
+  return { ...sqlToRow(r), system: r.system_prompt ? String(r.system_prompt) : '', user: r.user_prompt ? String(r.user_prompt) : '', request: tryParse(r.request_json), response: tryParse(r.response_json) };
+}
 
 const STAGE_COLOR: Record<string, string> = {
   'Story Chat': '#34d399',
@@ -26,7 +48,6 @@ const DETAIL_TABS = [
 ] as const;
 type DetailTab = (typeof DETAIL_TABS)[number]['id'];
 
-/** Pretty content: JSON → tree, strings → mono pre, empty → italic em-dash. */
 function AuditContent({ value }: { value: unknown }) {
   if (value == null || value === '') return <span className="aa-empty">— empty —</span>;
   if (typeof value === 'object') return <JsonTreeView data={value} defaultExpandDepth={3} />;
@@ -34,7 +55,7 @@ function AuditContent({ value }: { value: unknown }) {
   try {
     const parsed = JSON.parse(str);
     if (parsed && typeof parsed === 'object') return <JsonTreeView data={parsed} defaultExpandDepth={3} />;
-  } catch { /* not JSON — show as text */ }
+  } catch { /* not JSON */ }
   return <pre className="aa-pre">{str}</pre>;
 }
 
@@ -89,16 +110,52 @@ export function AiAudit() {
   const [rows, setRows] = useState<Row[]>([]);
   const [detail, setDetail] = useState<Detail | null>(null);
 
-  const refresh = useCallback(() => {
-    fetch('/api/ai-audit').then((r) => r.json()).then(setRows).catch(() => setRows([]));
+  const loadFromDb = useCallback(async () => {
+    const cached = await all<SqlAuditRow>('SELECT id, stage, model, ms, created_at, is_error FROM ai_audit ORDER BY id DESC');
+    if (cached.length > 0) setRows(cached.map(sqlToRow));
   }, []);
-  useEffect(() => { refresh(); }, [refresh]);
 
-  const open = (id: number) => {
-    fetch(`/api/ai-audit/${id}`).then((r) => r.json()).then(setDetail).catch(() => {});
+  const refresh = useCallback(async () => {
+    try {
+      const serverRows: Row[] = await fetch('/api/ai-audit').then((r) => r.json());
+      await syncAiAuditList(serverRows);
+      const merged = await all<SqlAuditRow>('SELECT id, stage, model, ms, created_at, is_error FROM ai_audit ORDER BY id DESC');
+      setRows(merged.map(sqlToRow));
+    } catch {
+      await loadFromDb();
+    }
+  }, [loadFromDb]);
+
+  useEffect(() => {
+    void loadFromDb();
+    void refresh();
+  }, [loadFromDb, refresh]);
+
+  const open = async (id: number) => {
+    // Serve from sql.js cache if full detail is already stored
+    const cached = await all<SqlAuditRow>('SELECT * FROM ai_audit WHERE id=?', [id]);
+    if (cached.length > 0 && cached[0].system_prompt != null) {
+      setDetail(sqlToDetail(cached[0]));
+      return;
+    }
+    try {
+      const d = await fetch(`/api/ai-audit/${id}`).then((r) => r.json()) as Detail;
+      await upsertAiAuditDetail(d);
+      setDetail(d);
+    } catch { /* ignore */ }
   };
-  const del = (id: number) => fetch(`/api/ai-audit/${id}`, { method: 'DELETE' }).then(refresh);
-  const clearAll = () => fetch('/api/ai-audit', { method: 'DELETE' }).then(refresh);
+
+  const del = async (id: number) => {
+    await fetch(`/api/ai-audit/${id}`, { method: 'DELETE' });
+    await deleteAiAuditRow(id);
+    setRows((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  const clearAll = async () => {
+    await fetch('/api/ai-audit', { method: 'DELETE' });
+    await clearAiAuditTable();
+    setRows([]);
+  };
 
   if (detail) return <EntryDetail detail={detail} onBack={() => setDetail(null)} />;
 
@@ -108,8 +165,8 @@ export function AiAudit() {
         <SparkleIcon size={14} style={{ color: 'var(--story-accent-3)' }} />
         <span className="aa-title">AI Audit</span>
         <span className="aa-count">{rows.length} records</span>
-        <ButtonView size="sm" variant="secondary" iconLeft={<RefreshIcon size={12} />} onClick={refresh}>Refresh</ButtonView>
-        {rows.length > 0 && <ButtonView size="sm" accentColor="var(--color-error, #f87171)" iconLeft={<TrashIcon size={12} />} onClick={clearAll}>Clear All</ButtonView>}
+        <ButtonView size="sm" variant="secondary" iconLeft={<RefreshIcon size={12} />} onClick={() => void refresh()}>Refresh</ButtonView>
+        {rows.length > 0 && <ButtonView size="sm" accentColor="var(--color-error, #f87171)" iconLeft={<TrashIcon size={12} />} onClick={() => void clearAll()}>Clear All</ButtonView>}
       </div>
 
       <div className="aa-table-wrap">
@@ -126,14 +183,14 @@ export function AiAudit() {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="aa-row" onClick={() => open(r.id)}>
+                <tr key={r.id} className="aa-row" onClick={() => void open(r.id)}>
                   <td className="aa-id">{r.id}</td>
                   <td><span className="aa-stage" style={{ color: stageColor(r.stage), background: `color-mix(in srgb, ${stageColor(r.stage)} 16%, transparent)` }}>{r.stage}</span></td>
                   <td className="aa-model">{r.model}</td>
                   <td className="aa-ms" style={{ color: r.error ? 'var(--color-error,#f87171)' : '#fbbf24' }}>{r.error ? 'error' : `${r.ms}ms`}</td>
                   <td className="aa-time">{new Date(r.createdAt).toLocaleString()}</td>
                   <td className="aa-actions" onClick={(e) => e.stopPropagation()}>
-                    <IconButtonView size="sm" tooltip="Delete" icon={<TrashIcon size={12} />} accentColor="var(--color-error, #f87171)" onClick={() => del(r.id)} />
+                    <IconButtonView size="sm" tooltip="Delete" icon={<TrashIcon size={12} />} accentColor="var(--color-error, #f87171)" onClick={() => void del(r.id)} />
                   </td>
                 </tr>
               ))}

@@ -14,6 +14,7 @@ export interface Character {
   traits: string[];
   lockedSeed: number | null;
   referenceImage: string | null;
+  voiceId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,6 +25,7 @@ export interface CastEntry {
   name: string;
   lookDescription: string;
   lockedSeed: number | null;
+  voiceId: string | null;
 }
 
 interface Row {
@@ -36,6 +38,7 @@ interface Row {
   traits_json: SqlValue;
   locked_seed: SqlValue;
   reference_image: SqlValue;
+  voice_id: SqlValue;
   created_at: SqlValue;
   updated_at: SqlValue;
 }
@@ -51,6 +54,7 @@ function rowToChar(r: Row): Character {
     traits: r.traits_json ? JSON.parse(String(r.traits_json)) : [],
     lockedSeed: r.locked_seed != null ? Number(r.locked_seed) : null,
     referenceImage: r.reference_image != null ? String(r.reference_image) : null,
+    voiceId: r.voice_id != null ? String(r.voice_id) : null,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   };
@@ -104,9 +108,10 @@ export const useCharactersStore = create<CharactersState>((set, get) => ({
     const id = uid();
     const now = new Date().toISOString();
     await run(
-      'INSERT INTO characters (id,name,role,species,age,look_description,traits_json,locked_seed,reference_image,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+      'INSERT INTO characters (id,name,role,species,age,look_description,traits_json,locked_seed,reference_image,voice_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
       [id, data.name, data.role, data.species, data.age, data.lookDescription,
-        JSON.stringify(data.traits), data.lockedSeed ?? null, data.referenceImage ?? null, now, now],
+        JSON.stringify(data.traits), data.lockedSeed ?? null, data.referenceImage ?? null,
+        data.voiceId ?? null, now, now],
     );
     const char: Character = { ...data, id, createdAt: now, updatedAt: now };
     set((s) => ({ characters: [char, ...s.characters], editingId: id }));
@@ -119,9 +124,10 @@ export const useCharactersStore = create<CharactersState>((set, get) => ({
     if (!char) return;
     const updated: Character = { ...char, ...patch, updatedAt: now };
     await run(
-      'UPDATE characters SET name=?,role=?,species=?,age=?,look_description=?,traits_json=?,locked_seed=?,reference_image=?,updated_at=? WHERE id=?',
+      'UPDATE characters SET name=?,role=?,species=?,age=?,look_description=?,traits_json=?,locked_seed=?,reference_image=?,voice_id=?,updated_at=? WHERE id=?',
       [updated.name, updated.role, updated.species, updated.age, updated.lookDescription,
-        JSON.stringify(updated.traits), updated.lockedSeed ?? null, updated.referenceImage ?? null, now, id],
+        JSON.stringify(updated.traits), updated.lockedSeed ?? null, updated.referenceImage ?? null,
+        updated.voiceId ?? null, now, id],
     );
     set((s) => ({ characters: s.characters.map((c) => c.id === id ? updated : c) }));
   },
@@ -157,6 +163,6 @@ export const useCharactersStore = create<CharactersState>((set, get) => ({
     const { characters, selectedIds } = get();
     return characters
       .filter((c) => selectedIds.includes(c.id))
-      .map((c) => ({ id: c.id, name: c.name, lookDescription: c.lookDescription, lockedSeed: c.lockedSeed }));
+      .map((c) => ({ id: c.id, name: c.name, lookDescription: c.lookDescription, lockedSeed: c.lockedSeed, voiceId: c.voiceId }));
   },
 }));

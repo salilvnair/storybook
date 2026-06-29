@@ -32,8 +32,12 @@ function pdfText(str) {
   return String(str ?? '')
     .replace(/[‘’ʼ′]/g, "'").replace(/[“”″]/g, '"')
     .replace(/…/g, '...').replace(/—/g, '--').replace(/–/g, '-')
-    .replace(/[   ]/g, ' ').replace(/[•‣◦]/g, '*').replace(/[✓✔]/g, 'v')
+    .replace(/[ ​‌]/g, ' ').replace(/[•‣◦]/g, '*').replace(/[✓✔]/g, 'v')
     .replace(/[^\x00-\xFF]/g, '?');
+}
+
+function stripPhonics(str) {
+  return String(str ?? '').replace(/\*\*(.+?)\*\*/g, '$1');
 }
 function roundedRectPath(w, h, r) {
   return [`M ${r} 0`, `H ${w - r}`, `A ${r} ${r} 0 0 1 ${w} ${r}`, `V ${h - r}`,
@@ -143,7 +147,7 @@ export async function buildFromTemplate(spec, story, sceneImages = [], coverImag
       // Narration body
       const bodySize = (scene.narration && scene.narration.length > 120) ? 14 : 16;
       const lh = bodySize * 1.5;
-      const bodyLines = wrap(scene.narration || '', serif, bodySize, cardW - 56);
+      const bodyLines = wrap(stripPhonics(scene.narration) || '', serif, bodySize, cardW - 56);
       const blockH = bodyLines.length * lh;
       let by = cardY + cardH / 2 + blockH / 2 - bodySize;
       for (const line of bodyLines) {
@@ -158,6 +162,21 @@ export async function buildFromTemplate(spec, story, sceneImages = [], coverImag
         for (const line of sayLines) {
           textPage.drawText(line, { x: cardX + (cardW - serifBold.widthOfTextAtSize(line, bodySize - 1)) / 2, y: by, font: serifBold, size: bodySize - 1, color: emphasis });
           by -= lh - 2;
+        }
+      }
+
+      // Branch choices
+      if (scene.choices && scene.choices.length > 0) {
+        by -= 10;
+        const choiceLabel = 'What happens next?';
+        textPage.drawText(choiceLabel, { x: cardX + (cardW - serifBold.widthOfTextAtSize(choiceLabel, bodySize - 3)) / 2, y: by, font: serifBold, size: bodySize - 3, color: emphasis });
+        by -= lh;
+        for (const ch of scene.choices) {
+          const cLines = wrap(`-> ${ch.text}`, serif, bodySize - 4, cardW - 56);
+          for (const line of cLines) {
+            textPage.drawText(line, { x: cardX + 24, y: by, font: serif, size: bodySize - 4, color: ink });
+            by -= lh - 2;
+          }
         }
       }
       continue;
@@ -182,7 +201,7 @@ export async function buildFromTemplate(spec, story, sceneImages = [], coverImag
     const innerW = cardW - 48, cx = cardX + cardW / 2;
     const bodySize = (scene.narration && scene.narration.length > 70) ? 15 : 18;
     const lh = bodySize * 1.45;
-    const bodyLines = wrap(scene.narration || scene.title || '', serif, bodySize, innerW);
+    const bodyLines = wrap(stripPhonics(scene.narration) || scene.title || '', serif, bodySize, innerW);
     const sayLines = scene.says ? wrap(`"${scene.says}"`, serifBold, bodySize - 1, innerW) : [];
     const blockH = bodyLines.length * lh + (sayLines.length ? sayLines.length * (lh - 1) + 8 : 0);
     let y = cardY + cardH / 2 + blockH / 2 - bodySize;
@@ -195,6 +214,21 @@ export async function buildFromTemplate(spec, story, sceneImages = [], coverImag
       for (const line of sayLines) {
         page.drawText(line, { x: cx - serifBold.widthOfTextAtSize(line, bodySize - 1) / 2, y, font: serifBold, size: bodySize - 1, color: emphasis });
         y -= lh - 1;
+      }
+    }
+
+    // Branch choices
+    if (scene.choices && scene.choices.length > 0) {
+      y -= 8;
+      const choiceLabel = 'What happens next?';
+      page.drawText(choiceLabel, { x: cx - serifBold.widthOfTextAtSize(choiceLabel, bodySize - 4) / 2, y, font: serifBold, size: bodySize - 4, color: emphasis });
+      y -= lh;
+      for (const ch of scene.choices) {
+        const cLines = wrap(`-> ${ch.text}`, serif, bodySize - 5, innerW);
+        for (const line of cLines) {
+          page.drawText(line, { x: cardX + 24, y, font: serif, size: bodySize - 5, color: ink });
+          y -= lh - 3;
+        }
       }
     }
     page.drawText(String(i + 1), { x: textX + 18, y: 14, font: serif, size: 10, color: rgb(0.45, 0.4, 0.35) });

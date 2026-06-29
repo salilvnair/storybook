@@ -4,7 +4,7 @@
  *   Providers: list / set active + configs
  */
 import { Router } from 'express';
-import { listAiAudit, getAiAudit, deleteAiAudit, clearAiAudit } from '../store/aiAudit.js';
+import { listAiAudit, getAiAudit, deleteAiAudit, clearAiAudit, setMax } from '../store/aiAudit.js';
 import { listProviders, setProviders } from '../store/provider.js';
 
 export function devtoolsRouter() {
@@ -19,6 +19,11 @@ export function devtoolsRouter() {
   });
   router.delete('/api/ai-audit/:id', (req, res) => { deleteAiAudit(req.params.id); res.json({ ok: true }); });
   router.delete('/api/ai-audit', (_req, res) => { clearAiAudit(); res.json({ ok: true }); });
+  router.patch('/api/ai-audit/config', (req, res) => {
+    const { maxEntries } = req.body || {};
+    if (typeof maxEntries === 'number' && maxEntries > 0) setMax(maxEntries);
+    res.json({ ok: true });
+  });
 
   // ── Providers ────────────────────────────────────────────────────────────────
   router.get('/api/providers', (_req, res) => res.json(listProviders()));

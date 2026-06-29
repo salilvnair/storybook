@@ -98,7 +98,70 @@ async function open(): Promise<Database> {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS voices (
+      id TEXT PRIMARY KEY,
+      label TEXT NOT NULL,
+      engine_id TEXT NOT NULL,
+      clone_voice_id TEXT NOT NULL,
+      consent_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS ai_audit (
+      id INTEGER PRIMARY KEY,
+      stage TEXT NOT NULL DEFAULT '',
+      model TEXT NOT NULL DEFAULT '',
+      ms INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL,
+      is_error INTEGER NOT NULL DEFAULT 0,
+      system_prompt TEXT,
+      user_prompt TEXT,
+      request_json TEXT,
+      response_json TEXT
+    );
+    CREATE TABLE IF NOT EXISTS worlds (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS world_stories (
+      world_id TEXT NOT NULL,
+      story_id TEXT NOT NULL,
+      episode INTEGER NOT NULL DEFAULT 1,
+      summary TEXT NOT NULL DEFAULT '',
+      PRIMARY KEY (world_id, story_id)
+    );
+    CREATE TABLE IF NOT EXISTS page_designs (
+      story_id TEXT NOT NULL,
+      page_idx INTEGER NOT NULL,
+      elements_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (story_id, page_idx)
+    );
+    CREATE TABLE IF NOT EXISTS page_variants (
+      story_id TEXT NOT NULL,
+      page_idx INTEGER NOT NULL,
+      variants_json TEXT NOT NULL DEFAULT '[]',
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (story_id, page_idx)
+    );
+    CREATE TABLE IF NOT EXISTS packs (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      author TEXT,
+      exported_at TEXT NOT NULL,
+      installed_at TEXT NOT NULL,
+      data_json TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS custom_art_styles (
+      id TEXT PRIMARY KEY,
+      data_json TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
+  try { db.run('ALTER TABLE characters ADD COLUMN voice_id TEXT;'); } catch { /* already exists */ }
   return db;
 }
 
@@ -142,13 +205,68 @@ export async function tables(): Promise<string[]> {
   return rows.map((r) => r.name);
 }
 
-/** Append an audit entry. */
+const PREFS_KEY = 'storybook.prefs.v1';
+function getMaxAuditLog(): number {
+  try { const r = localStorage.getItem(PREFS_KEY); if (r) return Number(JSON.parse(r).maxAuditLogEntries) || 10000; } catch { /* */ }
+  return 10000;
+}
+function getMaxAiAudit(): number {
+  try { const r = localStorage.getItem(PREFS_KEY); if (r) return Number(JSON.parse(r).maxAiAuditEntries) || 10000; } catch { /* */ }
+  return 10000;
+}
+
+/** Append an audit entry, trimming to the configured max. */
 export async function audit(kind: string, summary: string, detail?: unknown): Promise<void> {
-  // Gated by the Audit Config — disabled event types are not recorded.
   if (!isAuditEventEnabled(kind)) return;
-  await run('INSERT INTO audit_log (ts, kind, summary, detail_json) VALUES (?,?,?,?)', [
+  const db = await getDb();
+  db.run('INSERT INTO audit_log (ts, kind, summary, detail_json) VALUES (?,?,?,?)', [
     new Date().toISOString(), kind, summary, detail ? JSON.stringify(detail) : null,
   ]);
+  const limit = getMaxAuditLog();
+  db.run(`DELETE FROM audit_log WHERE id NOT IN (SELECT id FROM audit_log ORDER BY id DESC LIMIT ${limit})`);
+  await persist();
+}
+
+/** Upsert lightweight AI audit rows (no detail fields) — does not overwrite cached detail. */
+export async function syncAiAuditList(rows: Array<{ id: number; stage: string; model: string; ms: number; createdAt: string; error: boolean }>): Promise<void> {
+  const db = await getDb();
+  for (const e of rows) {
+    db.run(
+      `INSERT INTO ai_audit (id, stage, model, ms, created_at, is_error) VALUES (?,?,?,?,?,?)
+       ON CONFLICT(id) DO NOTHING`,
+      [e.id, e.stage, e.model, e.ms, e.createdAt, e.error ? 1 : 0],
+    );
+  }
+  const limit = getMaxAiAudit();
+  db.run(`DELETE FROM ai_audit WHERE id NOT IN (SELECT id FROM ai_audit ORDER BY id DESC LIMIT ${limit})`);
+  await persist();
+}
+
+/** Upsert a full AI audit detail entry (system/user/request/response). */
+export async function upsertAiAuditDetail(e: { id: number; stage: string; model: string; ms: number; createdAt: string; error: boolean; system: string; user: string; request: unknown; response: unknown }): Promise<void> {
+  const db = await getDb();
+  db.run(
+    `INSERT INTO ai_audit (id, stage, model, ms, created_at, is_error, system_prompt, user_prompt, request_json, response_json)
+     VALUES (?,?,?,?,?,?,?,?,?,?)
+     ON CONFLICT(id) DO UPDATE SET
+       system_prompt=excluded.system_prompt, user_prompt=excluded.user_prompt,
+       request_json=excluded.request_json, response_json=excluded.response_json`,
+    [
+      e.id, e.stage, e.model, e.ms, e.createdAt, e.error ? 1 : 0,
+      e.system || null, e.user || null,
+      e.request != null ? JSON.stringify(e.request) : null,
+      e.response != null ? JSON.stringify(e.response) : null,
+    ],
+  );
+  await persist();
+}
+
+export async function deleteAiAuditRow(id: number): Promise<void> {
+  await run('DELETE FROM ai_audit WHERE id=?', [id]);
+}
+
+export async function clearAiAuditTable(): Promise<void> {
+  await run('DELETE FROM ai_audit');
 }
 
 /** Key-value snapshot store (daakia-style) — UI state mirrored here for the DB Explorer. */

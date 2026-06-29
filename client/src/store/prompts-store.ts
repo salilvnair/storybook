@@ -28,8 +28,7 @@ export interface PromptDef {
   parts: PromptPart[];   // always [system, user]
 }
 
-// Keep category type open to 'Character' alongside existing 'Story' | 'Illustration'
-export type PromptCategory = 'Story' | 'Illustration' | 'Character';
+export type PromptCategory = 'Story' | 'Illustration' | 'Character' | 'ArtDirector' | 'Branching' | 'Language' | 'Learning';
 
 export const PROMPT_DEFS: PromptDef[] = [
   {
@@ -101,6 +100,83 @@ export const PROMPT_DEFS: PromptDef[] = [
         default: 'Portrait of a cute cartoon child character. {{characterClause}}',
       },
       { id: 'user', label: 'User', icon: '💬', overrideKey: 'photoHeroPromptNotes', default: '' },
+    ],
+  },
+  {
+    key: 'artDirectorPrompt',
+    label: 'Art Director',
+    category: 'ArtDirector',
+    description: 'System prompt for the AI Art Director that analyses a story and recommends an illustration style. {{title}}, {{summary}}, and {{styles}} are injected automatically.',
+    color: '#f97316',
+    variables: ['{{title}}', '{{summary}}', '{{styles}}'],
+    parts: [
+      { id: 'system', label: 'System', icon: '⚙', overrideKey: 'artDirectorPrompt', default: '' },
+      { id: 'user', label: 'User', icon: '💬', overrideKey: 'artDirectorPromptNotes', default: '' },
+    ],
+  },
+  // S21 — Branching
+  {
+    key: 'branchingPrompt',
+    label: 'Branching Story',
+    category: 'Branching',
+    description: 'Prompt used to add branch choices to a linear story. {{story}} is replaced with the full story JSON.',
+    color: '#34d399',
+    variables: ['{{story}}'],
+    parts: [
+      { id: 'system', label: 'System', icon: '⚙', overrideKey: 'branchingPrompt', default: '' },
+      { id: 'user', label: 'User', icon: '💬', overrideKey: 'branchingPromptNotes', default: '' },
+    ],
+  },
+  // S22 — Translate
+  {
+    key: 'translatePrompt',
+    label: 'Translate Story',
+    category: 'Language',
+    description: 'Prompt to translate the story text into {{targetLanguage}}.',
+    color: '#38bdf8',
+    variables: ['{{targetLanguage}}', '{{story}}'],
+    parts: [
+      { id: 'system', label: 'System', icon: '⚙', overrideKey: 'translatePrompt', default: '' },
+      { id: 'user', label: 'User', icon: '💬', overrideKey: 'translatePromptNotes', default: '' },
+    ],
+  },
+  // S22 — Adapt level
+  {
+    key: 'adaptLevelPrompt',
+    label: 'Reading Level',
+    category: 'Language',
+    description: 'Rewrites story text for a target reading level: pre-reader, early-reader, or confident-reader.',
+    color: '#a78bfa',
+    variables: ['{{level}}', '{{story}}'],
+    parts: [
+      { id: 'system', label: 'System', icon: '⚙', overrideKey: 'adaptLevelPrompt', default: '' },
+      { id: 'user', label: 'User', icon: '💬', overrideKey: 'adaptLevelPromptNotes', default: '' },
+    ],
+  },
+  // S23 — Quiz
+  {
+    key: 'quizPrompt',
+    label: 'Comprehension Quiz',
+    category: 'Learning',
+    description: 'Generates comprehension questions, SEL skill tag, and parent prompts from the story.',
+    color: '#fbbf24',
+    variables: ['{{story}}'],
+    parts: [
+      { id: 'system', label: 'System', icon: '⚙', overrideKey: 'quizPrompt', default: '' },
+      { id: 'user', label: 'User', icon: '💬', overrideKey: 'quizPromptNotes', default: '' },
+    ],
+  },
+  // S23 — Vocab
+  {
+    key: 'vocabPrompt',
+    label: 'Vocabulary Card',
+    category: 'Learning',
+    description: 'Generates a kid-friendly definition for a tapped word. {{word}} and {{context}} are filled in.',
+    color: '#fb923c',
+    variables: ['{{word}}', '{{context}}'],
+    parts: [
+      { id: 'system', label: 'System', icon: '⚙', overrideKey: 'vocabPrompt', default: '' },
+      { id: 'user', label: 'User', icon: '💬', overrideKey: 'vocabPromptNotes', default: '' },
     ],
   },
 ];

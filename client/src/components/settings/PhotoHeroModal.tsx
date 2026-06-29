@@ -82,7 +82,7 @@ export function PhotoHeroModal({ open, onClose, onSelect, characterName }: Props
       const data = await res.json();
       if (!res.ok) {
         if (data.requiresLocal) {
-          setError('Photo → Hero requires a local image engine (localhost / LAN). Set a local engine URL in Settings → Providers → Image Engine.');
+          setError('Photo → Hero requires a local image engine (localhost / LAN). Set a local engine URL in Settings → Image Engine.');
         } else {
           setError(data.error || 'Generation failed.');
         }

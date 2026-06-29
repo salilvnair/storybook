@@ -8,6 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ContextMenuView, type ContextMenuItem, ModalView, ButtonView, ChipView } from '@salilvnair/dui';
 import { BookFlip } from '../components/book/BookFlip';
 import { PageFlipBook } from '../components/book/PageFlipBook';
+import { PdfPageViewer } from '../components/book/PdfPageViewer';
 import { usePrefsStore } from '../store/prefs-store';
 import {
   BookIcon, TrashIcon, DownloadIcon, RefreshIcon, MoreVertIcon,
@@ -37,6 +38,7 @@ export function LibraryTab() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<ViewMode>('latest');
   const [reading, setReading] = useState<StoryMeta | null>(null);
+  const [realPreview, setRealPreview] = useState(false);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [printTarget, setPrintTarget] = useState<StoryMeta | null>(null);
   const [printOpts, setPrintOpts] = useState<PrintOptions>({ format: 'default', layout: 'spread' });
@@ -54,7 +56,7 @@ export function LibraryTab() {
 
   const visible = stories.filter((s) => viewMode === 'archive' ? !!s.archived : !s.archived);
 
-  const openReader = (s: StoryMeta) => { setReading(s); setMenu(null); };
+  const openReader = (s: StoryMeta) => { setReading(s); setRealPreview(false); setMenu(null); };
 
   const downloadPdf = (id: string, title: string, format: 'default' | 'a4' = 'default', layout: 'spread' | '1by1' = 'spread') => {
     if (format === 'default' && layout === 'spread') {
@@ -164,7 +166,7 @@ export function LibraryTab() {
               onClick={() => setViewMode('archive')}
             >Archive</button>
           </div>
-          <ButtonView size="sm" variant="secondary" iconLeft={<RefreshIcon size={12} />} onClick={refresh}>Refresh</ButtonView>
+          <ButtonView size="sm" variant="secondary" iconLeft={<RefreshIcon size={12} />} onClick={refresh} style={{ height: 32 }}>Refresh</ButtonView>
         </div>
       </div>
       <p className="lib-tab-lead">
@@ -307,6 +309,18 @@ export function LibraryTab() {
         size="xl"
         headerColor="var(--story-accent-3)"
         headerGradient
+        footerLeft={
+          <div className="lib-view-toggle">
+            <button
+              className={`lib-vt-btn${!realPreview ? ' is-active' : ''}`}
+              onClick={() => setRealPreview(false)}
+            >Standard</button>
+            <button
+              className={`lib-vt-btn${realPreview ? ' is-active' : ''}`}
+              onClick={() => setRealPreview(true)}
+            >Real Preview</button>
+          </div>
+        }
         footerRight={reading && (
           <ButtonView size="md" accentColor="var(--story-accent)" iconLeft={<DownloadIcon size={14} />} onClick={() => downloadPdf(reading.id, reading.title)}>
             Download PDF
@@ -314,9 +328,11 @@ export function LibraryTab() {
         )}
       >
         {reading && (
-          readerMode === 'pageflip'
-            ? <PageFlipBook storyId={reading.id} pageCount={reading.pageCount} title={reading.title} />
-            : <BookFlip storyId={reading.id} pageCount={reading.pageCount} title={reading.title} />
+          realPreview
+            ? <PdfPageViewer key={`pdf-${reading.id}`} pdfUrl={`/api/stories/${reading.id}/pdf`} />
+            : readerMode === 'pageflip'
+              ? <PageFlipBook storyId={reading.id} pageCount={reading.pageCount} title={reading.title} />
+              : <BookFlip storyId={reading.id} pageCount={reading.pageCount} title={reading.title} />
         )}
       </ModalView>
     </div>

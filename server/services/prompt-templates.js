@@ -22,6 +22,94 @@ export const DEFAULT_PHOTO_HERO_PROMPT = 'Portrait of a cute cartoon child chara
 
 export const DEFAULT_CHARACTER_CLAUSE = 'Characters (always draw with exactly these features) — {{characters}}.';
 
+// ── Art Director ─────────────────────────────────────────────────────────────
+
+export const DEFAULT_ART_DIRECTOR_PROMPT =
+  "You are an expert children's picture-book Art Director. Analyse the story and recommend the best illustration style from the list provided.\n\n" +
+  'Story title: {{title}}\nStory summary: {{summary}}\n\nAvailable styles:\n{{styles}}\n\n' +
+  'Respond ONLY with valid JSON — no markdown, no text outside the JSON object:\n' +
+  '{"suggestedStyleId":"<id from list>","mood":"<adventurous|dreamy|silly|cosy|magical|educational>","ageGroup":"<toddler|young|older>","reasoning":"<1-2 sentences>","musicMood":"<calm|playful|adventurous|dreamy|whimsical>"}';
+
+// ── Music scoring ─────────────────────────────────────────────────────────────
+
+export const MUSIC_MOOD_PROMPTS = {
+  calm: "peaceful gentle children's lullaby music, soft piano and acoustic guitar, soothing bedtime feel",
+  playful: "cheerful bouncy children's music, playful xylophone and glockenspiel, happy energetic rhythm",
+  adventurous: "exciting adventure music for children, uplifting orchestral, heroic theme with brass and strings",
+  dreamy: "dreamy floating ambient music, soft magical soundscape, fairy-tale atmosphere, music box tinkling",
+  whimsical: "whimsical magical children's music, music box melody, sparkly twinkling sounds, light and airy",
+};
+
+// ── S21 — Interactive Branching ──────────────────────────────────────────────
+
+export const DEFAULT_BRANCHING_PROMPT =
+  "You are a children's picture-book author. You will receive an existing linear story as JSON.\n" +
+  "Add 2 choices to the end of EACH scene EXCEPT the last scene. Each choice should point to a different continuation that exists in the scenes array.\n\n" +
+  "Rules:\n" +
+  "- Add a `choices` array to each scene (except the last): [{\"text\": \"<short child-friendly choice>\", \"nextSceneIndex\": <0-based index>}]\n" +
+  "- Expand the scenes array so that different choice paths lead to different scenes (ideally 7-9 total scenes for a 2-branch story with a shared ending).\n" +
+  "- Keep all existing scene content. Only ADD new branch scenes + choices to existing ones.\n" +
+  "- Set `\"type\": \"branching\"` on the root story object.\n" +
+  "- Respond ONLY with valid JSON — the complete updated story object. No markdown, no explanation outside the JSON.\n\n" +
+  "Story to branch:\n{{story}}";
+
+// ── S22 — Multilingual + Reading Level ────────────────────────────────────────
+
+export const DEFAULT_TRANSLATE_PROMPT =
+  "You are a professional children's book translator. Translate ALL text fields of this story JSON into {{targetLanguage}}.\n\n" +
+  "Fields to translate: title, author, and for each scene: title, narration, says, thinks.\n" +
+  "DO NOT translate: image_prompt, style, type, choices[].nextSceneIndex, or any numeric/boolean fields.\n" +
+  "Keep the translation warm, simple, and child-friendly (target age 3-7).\n" +
+  "Respond ONLY with valid JSON — the complete translated story object.\n\n" +
+  "Story:\n{{story}}";
+
+export const DEFAULT_ADAPT_LEVEL_PROMPT =
+  "You are a children's literacy expert. Rewrite the text of this story to suit the {{level}} reading level.\n\n" +
+  "Levels:\n" +
+  "- pre-reader: very short sentences (3-5 words), ultra-simple vocabulary, no complex clauses.\n" +
+  "- early-reader: short sentences (6-8 words), common everyday words, simple connectives.\n" +
+  "- confident-reader: longer sentences ok, richer vocabulary, idioms and metaphors appropriate.\n\n" +
+  "Rewrite ONLY: title (if needed), and per-scene: narration, says, thinks.\n" +
+  "DO NOT change: image_prompt, style, type, choices, or any structural fields.\n" +
+  "Respond ONLY with valid JSON — the complete updated story object.\n\n" +
+  "Story:\n{{story}}";
+
+export const DEFAULT_PHONICS_PROMPT =
+  "You are a children's phonics educator. Given this story JSON and a list of sight/focus words, return the same story with those words wrapped in **double asterisks** wherever they appear in narration, says, and thinks fields (this signals bold emphasis in the reader).\n\n" +
+  "Focus words: {{words}}\n" +
+  "Match case-insensitively. Wrap every occurrence. Only modify narration, says, thinks.\n" +
+  "Respond ONLY with valid JSON — the complete updated story object.\n\n" +
+  "Story:\n{{story}}";
+
+// ── S23 — Learning Layer ──────────────────────────────────────────────────────
+
+export const DEFAULT_QUIZ_PROMPT =
+  "You are a children's literacy educator. Read this story and generate a short learning pack.\n\n" +
+  "Return ONLY valid JSON with this exact structure (no markdown):\n" +
+  "{\n" +
+  "  \"questions\": [\n" +
+  "    {\"q\": \"<question>\", \"options\": [\"A\",\"B\",\"C\",\"D\"], \"answer\": 0},\n" +
+  "    ... (3-4 questions total, age-appropriate for 4-7 year olds)\n" +
+  "  ],\n" +
+  "  \"selSkill\": \"<one SEL skill: kindness|courage|honesty|perseverance|empathy|sharing|creativity>\",\n" +
+  "  \"selDescription\": \"<1 sentence explaining how the story demonstrates this skill>\",\n" +
+  "  \"parentPrompts\": [\"<question1>\", \"<question2>\", \"<question3>\"]\n" +
+  "}\n\n" +
+  "Story:\n{{story}}";
+
+export const DEFAULT_VOCAB_PROMPT =
+  "You are a children's dictionary author. Give a kid-friendly definition for the word '{{word}}' as used in this context: '{{context}}'.\n\n" +
+  "Return ONLY valid JSON:\n" +
+  "{\"word\": \"{{word}}\", \"definition\": \"<1-2 simple sentences a 5-year-old understands>\", \"imagePrompt\": \"<short image description for a cute cartoon picture of this word>\"}";
+
+// ── S24 — Story Universe / Continuity ─────────────────────────────────────────
+
+export const CONTINUITY_CONTEXT_TEMPLATE =
+  "SERIES CONTEXT — This is a continuation of the «{{worldName}}» universe.\n" +
+  "Returning characters: {{characters}}\n" +
+  "Prior story summaries:\n{{summaries}}\n" +
+  "Keep the same hero(es), setting, and established lore. Build naturally on what happened before.";
+
 // ── LLM story author ──────────────────────────────────────────────────────────
 
 export const STORYBOOK_FENCE = 'storybook';

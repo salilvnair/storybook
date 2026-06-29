@@ -14,8 +14,15 @@ import { useStoryStore, type Story } from '../store/story-store';
 import { useSettingsStore } from '../store/settings-store';
 import { useTemplatesStore } from '../store/templates-store';
 import { useCharactersStore } from '../store/characters-store';
+import { useWorldsStore } from '../store/worlds-store';
 import { TemplateSchematic } from './template/TemplateSchematic';
 import { ConvHistoryBox } from './chat/ConvHistoryBox';
+
+const CONTINUITY_TPL =
+  "SERIES CONTEXT — This is a continuation of the «{{worldName}}» universe.\n" +
+  "Returning characters: {{characters}}\n" +
+  "Prior story summaries:\n{{summaries}}\n" +
+  "Keep the same hero(es), setting, and established lore. Build naturally on what happened before.";
 
 const LANDING_CHIPS = [
   { chipText: '🦊 Fox & the grapes', chatText: 'Tell the classic Aesop fable of the Fox and the Grapes as a 5-scene cartoon storybook for a 5 year old, with speech and thought bubbles.' },
@@ -212,6 +219,33 @@ export function StorybookChat({ tabId }: Props) {
   const resetServerHistory = useCallback(async () => {
     await fetch(`/api/v1/conversation/reset/${tabId}`, { method: 'POST' }).catch(() => {});
   }, [tabId]);
+
+  // S24 — push world continuity context to server when active world changes
+  const activeWorldId = useWorldsStore((s) => s.activeWorldId);
+  useEffect(() => {
+    const pushCtx = async () => {
+      let worldContinuity = '';
+      if (activeWorldId) {
+        const state = useWorldsStore.getState();
+        const world = state.worlds.find((w) => w.id === activeWorldId);
+        if (world) {
+          const { characters, summaries } = state.continuityContext(activeWorldId);
+          if (summaries) {
+            worldContinuity = CONTINUITY_TPL
+              .replace('{{worldName}}', world.name)
+              .replace('{{characters}}', characters || 'same hero(es) as before')
+              .replace('{{summaries}}', summaries);
+          }
+        }
+      }
+      await fetch('/api/prompts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ worldContinuity }),
+      }).catch(() => {});
+    };
+    void pushCtx();
+  }, [activeWorldId]);
 
   const config = useMemo(
     () => ({

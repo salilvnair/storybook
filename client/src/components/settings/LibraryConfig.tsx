@@ -80,6 +80,24 @@ export function LibraryConfig() {
             size="sm"
           />
         </label>
+
+        <label className="ie-opt-row ie-opt-inline">
+          <div className="ie-opt-text">
+            <div className="ie-opt-label">Max image variants per page</div>
+            <div className="ie-opt-desc">How many generated image variants to keep per page in the Variant Gallery (stored in DB).</div>
+          </div>
+          <SelectInputView
+            options={[
+              { value: '1', label: '1 variant' },
+              { value: '2', label: '2 variants' },
+              { value: '3', label: '3 variants' },
+              { value: '4', label: '4 variants' },
+            ]}
+            value={String(prefs.maxVariants ?? 4)}
+            onChange={(v) => set('maxVariants', Number(v))}
+            size="sm"
+          />
+        </label>
       </div>
 
       <div className="ie-save-row">

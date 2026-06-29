@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
 
-const MAX = 500;
+let MAX = 500;
 const FILE = path.join(config.outputDir, 'ai-audit.json');
 
 let seq = 0;
@@ -33,6 +33,22 @@ function persist() {
     saveTimer = null;
     try { fs.writeFileSync(FILE, JSON.stringify(entries)); } catch { /* ignore */ }
   }, 250);
+}
+
+function flushSync() {
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  try { fs.writeFileSync(FILE, JSON.stringify(entries)); } catch { /* ignore */ }
+}
+
+// Flush synchronously on process exit so debounced writes are not lost.
+process.once('SIGTERM', () => { flushSync(); process.exit(0); });
+process.once('SIGINT', () => { flushSync(); process.exit(0); });
+process.once('exit', () => { flushSync(); });
+
+/** Update the in-memory ring buffer size (called from config route). */
+export function setMax(n) {
+  MAX = Math.max(1, Math.floor(n));
+  if (entries.length > MAX) { entries.length = MAX; persist(); }
 }
 
 export function recordAiCall({ stage, model, ms, system, user, request, response, error }) {

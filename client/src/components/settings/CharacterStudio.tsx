@@ -9,7 +9,9 @@ import {
   type SelectOption,
 } from '@salilvnair/dui';
 import { useCharactersStore, type Character, type CharacterRole } from '../../store/characters-store';
-import { UserIcon, UsersIcon, PlusIcon, TrashIcon, LockIcon, SaveIcon, CameraIcon } from '../../icons';
+import { useVoicesStore } from '../../store/voices-store';
+import { useAudioEngineStore } from '../../store/audio-engine-store';
+import { UserIcon, UsersIcon, PlusIcon, TrashIcon, LockIcon, SaveIcon, CameraIcon, MicIcon } from '../../icons';
 import { PhotoHeroModal } from './PhotoHeroModal';
 
 const ROLE_META: Record<CharacterRole, { label: string; color: string }> = {
@@ -104,23 +106,30 @@ function TraitEditor({ traits, onChange }: TraitEditorProps) {
 
 const BLANK: Omit<Character, 'id' | 'createdAt' | 'updatedAt'> = {
   name: '', role: 'hero', species: 'human', age: 'young child (4–6)',
-  lookDescription: '', traits: [], lockedSeed: null, referenceImage: null,
+  lookDescription: '', traits: [], lockedSeed: null, referenceImage: null, voiceId: null,
 };
+
+const EMPTY_VOICES: string[] = [];
 
 function CharacterForm() {
   const { characters, editingId, add, update, remove, setEditing } = useCharactersStore();
+  const { voices, loaded: voicesLoaded, load: loadVoices } = useVoicesStore();
+  // Derive directly from snapshot (not s.current() which calls get() internally)
+  const engineVoices = useAudioEngineStore((s) => s.engines.find((e) => e.id === s.config.engine)?.voices ?? EMPTY_VOICES);
   const char = characters.find((c) => c.id === editingId) ?? null;
   const [draft, setDraft] = useState<typeof BLANK>(BLANK);
   const [dirty, setDirty] = useState(false);
   const [photoModal, setPhotoModal] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => { if (!voicesLoaded) void loadVoices(); }, [voicesLoaded, loadVoices]);
+
   useEffect(() => {
     if (char) {
       setDraft({
         name: char.name, role: char.role, species: char.species, age: char.age,
         lookDescription: char.lookDescription, traits: char.traits,
-        lockedSeed: char.lockedSeed, referenceImage: char.referenceImage,
+        lockedSeed: char.lockedSeed, referenceImage: char.referenceImage, voiceId: char.voiceId,
       });
       setDirty(false);
     } else {
@@ -310,6 +319,30 @@ function CharacterForm() {
             </div>
           </div>
         </div>
+
+        {/* Narration voice */}
+        {(() => {
+          const voiceOptions: SelectOption[] = [
+            { value: '', label: '— default narrator voice —' },
+            ...engineVoices.map((v) => ({ value: v, label: `${v} (engine built-in)` })),
+            ...voices.map((v) => ({ value: `clone:${v.id}`, label: `🎙 ${v.label}` })),
+          ];
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span className="gen-k" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <MicIcon size={12} /> Narration voice
+                <span style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>(optional — used when this character speaks)</span>
+              </span>
+              <SelectInputView
+                size="sm"
+                value={draft.voiceId ?? ''}
+                onChange={(v) => set('voiceId', v || null)}
+                options={voiceOptions}
+                width="fw"
+              />
+            </div>
+          );
+        })()}
 
         {/* Photo → Hero */}
         <div style={{

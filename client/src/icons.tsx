@@ -70,3 +70,7 @@ export const UsersIcon = (p: IconProps) => (<Svg {...p}><circle cx="9" cy="8" r=
 export const LockIcon = (p: IconProps) => (<Svg {...p}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></Svg>);
 export const DnaIcon = (p: IconProps) => (<Svg {...p}><path d="M2 15c6.667-6 13.333 0 20-6M2 9c6.667 6 13.333 0 20 6M5 12h.01M19 12h.01" /></Svg>);
 export const CameraIcon = (p: IconProps) => (<Svg {...p}><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" /><circle cx="12" cy="13" r="3" /></Svg>);
+export const MicIcon = (p: IconProps) => (<Svg {...p}><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><path d="M12 19v3M9 22h6" /></Svg>);
+export const VolumeIcon = (p: IconProps) => (<Svg {...p}><path d="M11 5 6 9H2v6h4l5 4V5z" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14" /></Svg>);
+export const MusicIcon = (p: IconProps) => (<Svg {...p}><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></Svg>);
+export const GlobeIcon = (p: IconProps) => (<Svg {...p}><circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></Svg>);

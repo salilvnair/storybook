@@ -133,6 +133,25 @@ export async function audioEngineStatus(url) {
 }
 
 /**
+ * Clone a voice from a reference audio clip (Fish Speech / F5-TTS).
+ * Returns { voice_id, ... } from the engine's /clone endpoint.
+ */
+export async function audioEngineClone(engineId, url, sampleB64, refText) {
+  const base = cleanAudioUrl(url);
+  const body = {
+    reference_audio: sampleB64,
+    ...(refText ? { reference_text: refText } : {}),
+  };
+  const res = await fetch(`${base}/clone`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Clone ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+/**
  * Synthesise text with the selected TTS engine.
  * @param {string} engineId
  * @param {string} url        engine base URL (local Mac OR RunPod)

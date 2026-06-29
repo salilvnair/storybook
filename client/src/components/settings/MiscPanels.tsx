@@ -1,5 +1,5 @@
 /** General / Theme / AI Features settings panels (DUI). */
-import { ButtonView, ToggleSwitchView, StatsCardView, ChipView } from '@salilvnair/dui';
+import { ButtonView, ToggleSwitchView, StatsCardView, ChipView, SelectInputView, type SelectOption } from '@salilvnair/dui';
 import { usePrefsStore, type AiFeatures } from '../../store/prefs-store';
 import { ThemeCards } from './ThemeCards';
 import { useTemplatesStore } from '../../store/templates-store';
@@ -10,16 +10,33 @@ import { useThemesStore } from '../../store/themes-store';
 import { useImageEngineStore } from '../../store/image-engine-store';
 import { BookIcon, CpuIcon, PaletteIcon, SparkleIcon, TrashIcon } from '../../icons';
 
+const LOG_LIMIT_OPTIONS: SelectOption[] = [
+  { value: '1000', label: '1,000 entries' },
+  { value: '5000', label: '5,000 entries' },
+  { value: '10000', label: '10,000 entries (default)' },
+  { value: '50000', label: '50,000 entries' },
+  { value: '999999', label: 'Unlimited' },
+];
+
 export function GeneralPanel() {
   const templates = useTemplatesStore((s) => s.saved.length);
   const customProviders = useProvidersStore((s) => s.providers.length);
   const llmConfigured = useSettingsStore((s) => !!s.serverConfig?.llmConfigured);
-  // Count the active server .env provider as 1 when there are no custom ones.
   const providers = customProviders > 0 ? customProviders : (llmConfigured ? 1 : 0);
   const palettes = usePalettesStore((s) => s.palettes.length);
   const themes = useThemesStore((s) => s.themes.length);
   const engine = useImageEngineStore((s) => s.current());
   const version = '0.1.0';
+
+  const prefs = usePrefsStore((s) => s.prefs);
+  const setPref = usePrefsStore((s) => s.set);
+
+  const setMaxAuditLog = (val: string) => { setPref('maxAuditLogEntries', Number(val)); };
+  const setMaxAiAudit = (val: string) => {
+    const n = Number(val);
+    setPref('maxAiAuditEntries', n);
+    void fetch('/api/ai-audit/config', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ maxEntries: n }) });
+  };
 
   const resetDb = () => {
     if (!confirm('Erase the local database (templates, providers, palettes, themes, prompts, audit logs)? This cannot be undone.')) return;
@@ -50,6 +67,32 @@ export function GeneralPanel() {
             <div className="gen-row"><span className="gen-k">Image engine</span><ChipView size="sm" color={engine?.accent || '#8b5cf6'} label={engine?.label || '—'} /></div>
             <div className="gen-row"><span className="gen-k">Database</span><ChipView size="sm" color="#22d3ee" label="local sql.js · this browser" /></div>
           </div>
+        </div>
+
+        {/* Log limits card */}
+        <div className="gen-card">
+          <div className="gen-card-title">📋 Log Limits</div>
+          <div className="gen-rows">
+            <div className="gen-row ie-opt-row">
+              <span className="gen-k">Audit Log entries</span>
+              <SelectInputView
+                options={LOG_LIMIT_OPTIONS}
+                value={String(prefs.maxAuditLogEntries ?? 10000)}
+                onChange={setMaxAuditLog}
+                size="sm"
+              />
+            </div>
+            <div className="gen-row ie-opt-row">
+              <span className="gen-k">AI Audit entries</span>
+              <SelectInputView
+                options={LOG_LIMIT_OPTIONS}
+                value={String(prefs.maxAiAuditEntries ?? 10000)}
+                onChange={setMaxAiAudit}
+                size="sm"
+              />
+            </div>
+          </div>
+          <p className="gen-danger-tip" style={{ marginTop: 8 }}>Oldest entries are erased automatically when the limit is reached.</p>
         </div>
 
         {/* Danger zone — red card with a tip (like the engine card) */}

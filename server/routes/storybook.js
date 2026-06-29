@@ -13,9 +13,18 @@ import path from 'node:path';
 import { config } from '../config.js';
 import { ensureLoaded, generate as engineGenerate, generateStream as engineGenerateStream, engineList, status as engineStatus, getEngine } from '../services/engines/index.js';
 import { resolveImageConfig, getImageConfig, setImageConfig } from '../store/image-config.js';
-import { audioEngineList, audioEngineGenerate, audioEngineStatus } from '../services/audio-engines/index.js';
+import { audioEngineList, audioEngineGenerate, audioEngineStatus, audioEngineClone } from '../services/audio-engines/index.js';
 import { resolveAudioConfig, getAudioConfig, setAudioConfig } from '../store/audio-config.js';
-import { DEFAULT_SCENE_STYLE, DEFAULT_COVER_PROMPT, DEFAULT_PHOTO_HERO_PROMPT } from '../services/prompt-templates.js';
+import { musicEngineList, musicEngineGenerate, musicEngineStatus } from '../services/music-engines/index.js';
+import { resolveMusicConfig, getMusicConfig, setMusicConfig } from '../store/music-config.js';
+import {
+  DEFAULT_SCENE_STYLE, DEFAULT_COVER_PROMPT, DEFAULT_PHOTO_HERO_PROMPT,
+  DEFAULT_ART_DIRECTOR_PROMPT, MUSIC_MOOD_PROMPTS,
+  DEFAULT_BRANCHING_PROMPT,
+  DEFAULT_TRANSLATE_PROMPT, DEFAULT_ADAPT_LEVEL_PROMPT, DEFAULT_PHONICS_PROMPT,
+  DEFAULT_QUIZ_PROMPT, DEFAULT_VOCAB_PROMPT,
+} from '../services/prompt-templates.js';
+import { chat } from '../services/llm.js';
 import { saveStory, listStories, getStory, storyFile, removeStory, patchStoryMeta } from '../store/story-library.js';
 import { buildScenePrompt, buildCharacterClause } from '../services/storyAgent.js';
 import { buildFromTemplate } from '../services/pdf-from-template.js';
@@ -111,6 +120,78 @@ export function storybookRouter() {
         format: format || options.format || 'wav',
       });
       res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // POST /api/voice/clone — clone a voice from a reference audio sample (Fish Speech / F5-TTS)
+  router.post('/api/voice/clone', async (req, res) => {
+    const { label, sample_b64, ref_text, consent_given } = req.body || {};
+    if (!consent_given) return res.status(400).json({ error: 'Consent is required to process a voice sample.' });
+    if (!sample_b64) return res.status(400).json({ error: 'sample_b64 is required' });
+    try {
+      const { engine, url } = resolveAudioConfig();
+      const data = await audioEngineClone(engine, url, sample_b64, ref_text);
+      res.json({ ok: true, clone_voice_id: data.voice_id || data.id || `cloned-${Date.now()}`, engine_id: engine });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // ── Music engines: list + config + health + score ───────────────────────────
+  router.get('/api/engines/music', (_req, res) => {
+    res.json({ engines: musicEngineList(), config: getMusicConfig() });
+  });
+  router.get('/api/music-config', (_req, res) => res.json(getMusicConfig()));
+  router.post('/api/music-config', (req, res) => res.json({ ok: true, config: setMusicConfig(req.body || {}) }));
+  router.get('/api/music-config/health', async (_req, res) => {
+    const { engine, url } = resolveMusicConfig();
+    const configured = !!url && !url.includes('REPLACE');
+    if (!configured) return res.json({ engine, configured: false, ok: false });
+    try {
+      const s = await musicEngineStatus(url);
+      res.json({ engine, url, configured: true, ok: true, status: s.status || 'ok' });
+    } catch (err) {
+      res.json({ engine, url, configured: true, ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // Generate background music score — POST { mood, duration?, format? }
+  router.post('/api/storybook/score', async (req, res) => {
+    const { mood = 'playful', duration, format } = req.body || {};
+    const moodPrompt = MUSIC_MOOD_PROMPTS[mood] || MUSIC_MOOD_PROMPTS.playful;
+    try {
+      const { engine, url, options } = resolveMusicConfig();
+      if (!url) return res.status(503).json({ error: 'Music engine URL not configured. Set it in Settings → Music.' });
+      const data = await musicEngineGenerate(engine, url, moodPrompt, {
+        duration: duration ?? options.duration ?? 30,
+        format: format || options.format || 'wav',
+      });
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // AI Art Director — POST { title, summary, styles[] } → LLM → { suggestedStyleId, mood, reasoning, musicMood }
+  router.post('/api/storybook/art-director', async (req, res) => {
+    const { title, summary, styles = [] } = req.body || {};
+    if (!title) return res.status(400).json({ error: 'title is required' });
+    const ov = getPromptOverrides();
+    const styleList = styles.map((s) => `"${s.id}": ${s.label}`).join(', ');
+    const systemText = (ov.artDirectorPrompt || DEFAULT_ART_DIRECTOR_PROMPT)
+      .replace('{{title}}', title)
+      .replace('{{summary}}', summary || '(no summary)')
+      .replace('{{styles}}', styleList);
+    try {
+      const { content } = await chat(
+        [{ role: 'system', content: systemText }, { role: 'user', content: `Analyse this story and suggest the best style.` }],
+        { stage: 'Art Director', temperature: 0.3 },
+      );
+      const clean = content.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '');
+      const parsed = JSON.parse(clean);
+      res.json({ ok: true, ...parsed });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -425,6 +506,125 @@ export function storybookRouter() {
       try { fs.unlinkSync(file); } catch { /* ignore */ }
     }
     res.json({ ok: true });
+  });
+
+  // ── S21 — Interactive Branching ───────────────────────────────────────────────
+  router.post('/api/storybook/add-choices', async (req, res) => {
+    const { story } = req.body || {};
+    if (!story) return res.status(400).json({ error: 'story required' });
+    const ov = getPromptOverrides();
+    const systemText = ov.branchingPrompt || DEFAULT_BRANCHING_PROMPT;
+    const userText = systemText.replace('{{story}}', JSON.stringify(story, null, 2));
+    try {
+      const { content } = await chat(
+        [{ role: 'user', content: userText }],
+        { stage: 'Branching', temperature: 0.6 },
+      );
+      const clean = content.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '');
+      const branched = JSON.parse(clean);
+      res.json({ ok: true, story: branched });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // ── S22 — Translate ───────────────────────────────────────────────────────────
+  router.post('/api/storybook/translate', async (req, res) => {
+    const { story, targetLanguage } = req.body || {};
+    if (!story || !targetLanguage) return res.status(400).json({ error: 'story and targetLanguage required' });
+    const ov = getPromptOverrides();
+    const prompt = (ov.translatePrompt || DEFAULT_TRANSLATE_PROMPT)
+      .replace('{{targetLanguage}}', targetLanguage)
+      .replace('{{story}}', JSON.stringify(story, null, 2));
+    try {
+      const { content } = await chat(
+        [{ role: 'user', content: prompt }],
+        { stage: 'Translate', temperature: 0.2 },
+      );
+      const clean = content.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '');
+      res.json({ ok: true, story: JSON.parse(clean) });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // ── S22 — Adapt reading level ─────────────────────────────────────────────────
+  router.post('/api/storybook/adapt-level', async (req, res) => {
+    const { story, level } = req.body || {};
+    if (!story || !level) return res.status(400).json({ error: 'story and level required' });
+    const ov = getPromptOverrides();
+    const prompt = (ov.adaptLevelPrompt || DEFAULT_ADAPT_LEVEL_PROMPT)
+      .replace(/\{\{level\}\}/g, level)
+      .replace('{{story}}', JSON.stringify(story, null, 2));
+    try {
+      const { content } = await chat(
+        [{ role: 'user', content: prompt }],
+        { stage: 'AdaptLevel', temperature: 0.3 },
+      );
+      const clean = content.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '');
+      res.json({ ok: true, story: JSON.parse(clean) });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // ── S22 — Phonics emphasis ────────────────────────────────────────────────────
+  router.post('/api/storybook/phonics', async (req, res) => {
+    const { story, words = [] } = req.body || {};
+    if (!story) return res.status(400).json({ error: 'story required' });
+    const ov = getPromptOverrides();
+    const prompt = (ov.phonicsPrompt || DEFAULT_PHONICS_PROMPT)
+      .replace('{{words}}', words.join(', '))
+      .replace('{{story}}', JSON.stringify(story, null, 2));
+    try {
+      const { content } = await chat(
+        [{ role: 'user', content: prompt }],
+        { stage: 'Phonics', temperature: 0.1 },
+      );
+      const clean = content.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '');
+      res.json({ ok: true, story: JSON.parse(clean) });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // ── S23 — Comprehension quiz + SEL + parent prompts ──────────────────────────
+  router.post('/api/storybook/quiz', async (req, res) => {
+    const { story } = req.body || {};
+    if (!story) return res.status(400).json({ error: 'story required' });
+    const ov = getPromptOverrides();
+    const prompt = (ov.quizPrompt || DEFAULT_QUIZ_PROMPT)
+      .replace('{{story}}', JSON.stringify(story, null, 2));
+    try {
+      const { content } = await chat(
+        [{ role: 'user', content: prompt }],
+        { stage: 'Quiz', temperature: 0.4 },
+      );
+      const clean = content.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '');
+      res.json({ ok: true, ...JSON.parse(clean) });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // ── S23 — Vocabulary card lookup ──────────────────────────────────────────────
+  router.post('/api/storybook/vocab', async (req, res) => {
+    const { word, context = '' } = req.body || {};
+    if (!word) return res.status(400).json({ error: 'word required' });
+    const ov = getPromptOverrides();
+    const prompt = (ov.vocabPrompt || DEFAULT_VOCAB_PROMPT)
+      .replace(/\{\{word\}\}/g, word)
+      .replace('{{context}}', context);
+    try {
+      const { content } = await chat(
+        [{ role: 'user', content: prompt }],
+        { stage: 'Vocab', temperature: 0.3 },
+      );
+      const clean = content.trim().replace(/^```json\s*/i, '').replace(/```\s*$/, '');
+      res.json({ ok: true, ...JSON.parse(clean) });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
   });
 
   return router;

@@ -22,6 +22,9 @@ export interface Prefs {
   showCover: boolean;
   flipShadow: boolean;
   flipSpeed: number;
+  maxAuditLogEntries: number;
+  maxAiAuditEntries: number;
+  maxVariants: number;
 }
 
 const DEFAULTS: Prefs = {
@@ -31,6 +34,9 @@ const DEFAULTS: Prefs = {
   showCover: true,
   flipShadow: true,
   flipSpeed: 900,
+  maxAuditLogEntries: 10000,
+  maxAiAuditEntries: 10000,
+  maxVariants: 4,
 };
 
 function load(): Prefs {

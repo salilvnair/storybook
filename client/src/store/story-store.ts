@@ -29,6 +29,11 @@ function genMeta() {
   };
 }
 
+export interface BranchChoice {
+  text: string;
+  nextSceneIndex: number;
+}
+
 export interface Scene {
   index: number;
   title: string;
@@ -36,12 +41,16 @@ export interface Scene {
   says: string;
   thinks: string;
   image_prompt: string;
+  choices?: BranchChoice[];   // S21 — optional branch choices
 }
+
 export interface Story {
   title: string;
   author?: string;
   style?: string;
   scenes: Scene[];
+  type?: 'linear' | 'branching';   // S21
+  worldId?: string;                 // S24 — which universe this belongs to
 }
 export type { CastEntry };
 export interface Page {

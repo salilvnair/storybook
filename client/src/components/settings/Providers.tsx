@@ -8,8 +8,6 @@ import { useEffect } from 'react';
 import { useProvidersStore } from '../../store/providers-store';
 import { useSettingsStore } from '../../store/settings-store';
 import { StyledSelect } from './StyledSelect';
-import { ImageEngineSettings } from './ImageEngineSettings';
-import { AudioEngineSettings } from './AudioEngineSettings';
 import {
   LlmIcon, OpenAiProviderIcon, AnthropicProviderIcon, LmStudioProviderIcon, OllamaProviderIcon,
   DeepSeekProviderIcon, GrokProviderIcon, MistralProviderIcon, GeminiProviderIcon, QwenProviderIcon,
@@ -211,11 +209,6 @@ export function Providers() {
           )}
         </div>
 
-        {/* ── Image generation engine (Ideogram 4 / Z-Image Turbo / …) ── */}
-        <ImageEngineSettings />
-
-        {/* ── Audio / TTS engine (Kokoro TTS / …) ── */}
-        <AudioEngineSettings />
       </div>
     </div>
   );

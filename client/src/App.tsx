@@ -1,20 +1,25 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TabBar } from './components/TabBar';
 import { StoryTab } from './tabs/StoryTab';
 import { TemplatesTab } from './tabs/TemplatesTab';
 import { LibraryTab } from './tabs/LibraryTab';
 import { SamplePreviewTab } from './tabs/SamplePreviewTab';
 import { SettingsPage } from './tabs/SettingsPage';
-import { ButtonView, IconButtonView } from '@salilvnair/dui';
+import { ButtonView, IconButtonView, InfoPopupView } from '@salilvnair/dui';
 import { useTabsStore } from './store/tabs-store';
 import { useSettingsStore } from './store/settings-store';
 import { usePromptsStore } from './store/prompts-store';
 import { useTemplatesStore } from './store/templates-store';
 import { useProvidersStore } from './store/providers-store';
 import { useImageEngineStore } from './store/image-engine-store';
+import { useAudioEngineStore } from './store/audio-engine-store';
 import { useThemesStore } from './store/themes-store';
 import { usePalettesStore } from './store/palettes-store';
 import { useCharactersStore } from './store/characters-store';
+import { useMusicEngineStore } from './store/music-engine-store';
+import { useWorldsStore } from './store/worlds-store';
+import { usePageDesignStore } from './store/page-design-store';
+import { usePacksStore } from './store/packs-store';
 import { PaletteIcon, BookIcon, SettingsIcon } from './icons';
 import { BrandLogo } from './components/BrandLogo';
 
@@ -44,17 +49,33 @@ export default function App() {
     void loadTemplates();
     void loadProviders();
     void useImageEngineStore.getState().init();
+    void useMusicEngineStore.getState().init();
+    void useWorldsStore.getState().load();
     void useThemesStore.getState().load();
     void usePalettesStore.getState().load();
     const id = setInterval(() => { void fetchServerConfig(); void useImageEngineStore.getState().checkHealth(); }, 15000);
     void usePromptsStore.getState().load();
     void useCharactersStore.getState().load();
+    void usePageDesignStore.getState().load();
+    void usePacksStore.getState().load();
     return () => clearInterval(id);
     // Mount-once startup loads (stable zustand actions).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const audioConfig = useAudioEngineStore((s) => s.config);
+  const musicConfig = useMusicEngineStore((s) => s.config);
+  const audioEngine = useAudioEngineStore((s) => s.current());
+  const musicEngine = useMusicEngineStore((s) => s.current());
+
   const llmOk = !!serverConfig?.llmConfigured;
+  const audioOk = !!audioConfig.url;
+  const musicOk = !!musicConfig.url;
+  const anyOk = llmOk || imgHealth.ok || audioOk || musicOk;
+  const allOk = llmOk && imgHealth.ok && audioOk && musicOk;
+
+  const engineChipRef = useRef<HTMLButtonElement>(null);
+  const [enginePopupOpen, setEnginePopupOpen] = useState(false);
 
   return (
     <div className="story-app">
@@ -67,27 +88,55 @@ export default function App() {
         <div className="story-hero-actions">
           <ButtonView size="sm" variant="secondary" iconLeft={<PaletteIcon size={14} />} onClick={() => open('templates')}>Templates</ButtonView>
           <ButtonView size="sm" variant="secondary" iconLeft={<BookIcon size={14} />} onClick={() => open('library')}>Library</ButtonView>
-          {/* Provider · Model — plain label, no status dot */}
+          {/* Provider · Model — plain label */}
           <span className="story-status-pill is-plain" title="Active LLM provider · model">
             {(activeProvider?.name || (serverConfig?.llmModel ? 'server .env' : 'No provider'))}
             <span className="story-pill-sep">·</span>
             {(activeProvider?.model || serverConfig?.llmModel || '—')}
           </span>
-          {/* chat-engine — green dot if an LLM is configured */}
-          <span className="story-status-pill" title={llmOk ? 'Chat engine ready' : 'Chat engine not configured'}>
-            <span className={`story-status-dot ${llmOk ? 'ok' : 'bad'}`} />
-            chat-engine
-          </span>
-          {/* image-engine — green if the configured URL is reachable, red otherwise */}
-          <span
-            className="story-status-pill"
-            title={imgHealth.ok ? `${imgEngine?.label || 'Image engine'} reachable${imgHealth.status ? ` (${imgHealth.status})` : ''}` : imgHealth.configured ? `${imgEngine?.label || 'Image engine'} URL set but unreachable` : 'Image engine URL not configured — set it in Settings → Providers'}
-            onClick={() => open('settings')}
-            style={{ cursor: 'pointer' }}
+          {/* AI Engine chip — single pill that shows all engine statuses on click */}
+          <button
+            ref={engineChipRef}
+            className={`story-ai-engine-chip${allOk ? ' all-ok' : anyOk ? ' some-ok' : ''}`}
+            onClick={() => setEnginePopupOpen((o) => !o)}
+            title="Click to see engine statuses"
           >
-            <span className={`story-status-dot ${imgHealth.ok ? 'ok' : 'bad'}`} />
-            image-engine
-          </span>
+            <span className={`story-status-dot ${allOk ? 'ok' : anyOk ? 'warn' : 'bad'}`} />
+            AI Engine
+          </button>
+          <InfoPopupView
+            open={enginePopupOpen}
+            onClose={() => setEnginePopupOpen(false)}
+            anchorEl={engineChipRef.current}
+            title="AI Engine Status"
+            width={300}
+            items={[
+              {
+                code: 'chat-engine',
+                description: llmOk
+                  ? `🟢 ${activeProvider?.name || serverConfig?.llmModel || 'server .env'}`
+                  : '🔴 Not configured',
+              },
+              {
+                code: 'image-engine',
+                description: imgHealth.ok
+                  ? `🟢 ${imgEngine?.label || 'Image engine'} · ready`
+                  : imgHealth.configured ? '🟡 URL set · unreachable' : '🔴 Not configured',
+              },
+              {
+                code: 'voice-engine',
+                description: audioOk
+                  ? `🟢 ${audioEngine?.label || 'TTS'} · ${audioConfig.url}`
+                  : '🔴 Not configured',
+              },
+              {
+                code: 'music-engine',
+                description: musicOk
+                  ? `🟢 ${musicEngine?.label || 'Music'} · ${musicConfig.url}`
+                  : '🔴 Not configured',
+              },
+            ]}
+          />
           <IconButtonView size="md" tooltip="Settings" icon={<SettingsIcon size={15} />} onClick={() => open('settings')} />
         </div>
       </header>
