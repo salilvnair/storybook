@@ -18,6 +18,7 @@ const state = {
     steps: null,
     negativePrompt: '',
     aspect_ratio: config.runpod.aspectRatio || '1:1',
+    model: '',
   },
 };
 

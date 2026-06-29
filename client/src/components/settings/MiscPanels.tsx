@@ -58,7 +58,9 @@ export function GeneralPanel() {
           <p className="gen-danger-tip">
             Erasing the local database permanently deletes <b>all saved templates, providers, palettes, themes, prompts and audit logs</b> stored in this browser. The app reloads fresh. This cannot be undone.
           </p>
-          <ButtonView size="md" accentColor="var(--color-error, #f87171)" iconLeft={<TrashIcon size={14} />} onClick={resetDb}>Erase local database</ButtonView>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <ButtonView size="md" accentColor="var(--color-error, #f87171)" iconLeft={<TrashIcon size={14} />} onClick={resetDb}>Erase local database</ButtonView>
+          </div>
         </div>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { usePrefsStore } from './prefs-store';
 import { useImageEngineStore } from './image-engine-store';
 import { useProvidersStore } from './providers-store';
 import { useSettingsStore } from './settings-store';
+import { useCharactersStore, type CastEntry } from './characters-store';
 import { audit, run } from '../db/sqldb';
 
 /**
@@ -42,6 +43,7 @@ export interface Story {
   style?: string;
   scenes: Scene[];
 }
+export type { CastEntry };
 export interface Page {
   index: number;
   title: string;
@@ -75,7 +77,7 @@ interface StoryState {
   setStory: (s: Story) => void;
   reset: () => void;
   generate: (override?: { runpodUrl?: string }) => Promise<void>;
-  regeneratePage: (index: number, override?: { runpodUrl?: string }) => Promise<void>;
+  regeneratePage: (index: number, override?: { runpodUrl?: string }, lockedSeed?: number | null) => Promise<void>;
   regenerateCover: (override?: { runpodUrl?: string }) => Promise<void>;
 }
 
@@ -114,11 +116,12 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     const story = get().story;
     if (!story) return;
     set({ regeneratingCover: true });
+    const cast = useCharactersStore.getState().getSelected();
     try {
       const res = await fetch('/api/storybook/regenerate-cover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ story, override: engineOverride(override) }),
+        body: JSON.stringify({ story, override: engineOverride(override), cast: cast.length ? cast : undefined }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -130,16 +133,21 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     }
   },
 
-  regeneratePage: async (index, override) => {
+  regeneratePage: async (index, override, lockedSeed) => {
     const story = get().story;
     const scene = story?.scenes[index];
     if (!scene) return;
     set({ regenerating: index });
+    const cast = useCharactersStore.getState().getSelected();
     try {
       const res = await fetch('/api/storybook/regenerate-scene', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scene, style: story?.style, override: engineOverride(override) }),
+        body: JSON.stringify({
+          scene, style: story?.style, override: engineOverride(override),
+          cast: cast.length ? cast : undefined,
+          ...(lockedSeed != null ? { lockedSeed } : {}),
+        }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -193,10 +201,14 @@ export const useStoryStore = create<StoryState>((set, get) => ({
     });
 
     try {
+      const cast = useCharactersStore.getState().getSelected();
       const res = await fetch('/api/storybook/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ story, override: engineOverride(override), spec, features, meta: genMeta() }),
+        body: JSON.stringify({
+          story, override: engineOverride(override), spec, features, meta: genMeta(),
+          cast: cast.length ? cast : undefined,
+        }),
       });
       if (!res.ok || !res.body) throw new Error(`Server error ${res.status}`);
 

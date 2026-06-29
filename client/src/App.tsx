@@ -14,6 +14,7 @@ import { useProvidersStore } from './store/providers-store';
 import { useImageEngineStore } from './store/image-engine-store';
 import { useThemesStore } from './store/themes-store';
 import { usePalettesStore } from './store/palettes-store';
+import { useCharactersStore } from './store/characters-store';
 import { PaletteIcon, BookIcon, SettingsIcon } from './icons';
 import { BrandLogo } from './components/BrandLogo';
 
@@ -47,6 +48,7 @@ export default function App() {
     void usePalettesStore.getState().load();
     const id = setInterval(() => { void fetchServerConfig(); void useImageEngineStore.getState().checkHealth(); }, 15000);
     void usePromptsStore.getState().load();
+    void useCharactersStore.getState().load();
     return () => clearInterval(id);
     // Mount-once startup loads (stable zustand actions).
     // eslint-disable-next-line react-hooks/exhaustive-deps

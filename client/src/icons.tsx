@@ -65,3 +65,8 @@ export const MoreVertIcon = (p: IconProps) => (<Svg {...p}><circle cx="12" cy="5
 export const ArchiveIcon = (p: IconProps) => (<Svg {...p}><path d="M3 6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6z" /><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9" /><path d="M10 13h4" /></Svg>);
 export const PrintIcon = (p: IconProps) => (<Svg {...p}><path d="M6 9V3h12v6M6 18H4a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2" /><path d="M6 14h12v6H6z" /></Svg>);
 export const UnarchiveIcon = (p: IconProps) => (<Svg {...p}><path d="M3 6a1 1 0 0 1 1-1h16a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6z" /><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9" /><path d="M12 13v4M10 15l2-2 2 2" /></Svg>);
+export const UserIcon = (p: IconProps) => (<Svg {...p}><circle cx="12" cy="8" r="4" /><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" /></Svg>);
+export const UsersIcon = (p: IconProps) => (<Svg {...p}><circle cx="9" cy="8" r="3.5" /><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6" /><circle cx="17" cy="9" r="2.5" /><path d="M21 20c0-2.5-1.8-4.5-4-4.5" /></Svg>);
+export const LockIcon = (p: IconProps) => (<Svg {...p}><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" /></Svg>);
+export const DnaIcon = (p: IconProps) => (<Svg {...p}><path d="M2 15c6.667-6 13.333 0 20-6M2 9c6.667 6 13.333 0 20 6M5 12h.01M19 12h.01" /></Svg>);
+export const CameraIcon = (p: IconProps) => (<Svg {...p}><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" /><circle cx="12" cy="13" r="3" /></Svg>);

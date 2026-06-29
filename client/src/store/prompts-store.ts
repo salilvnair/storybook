@@ -20,13 +20,16 @@ export interface PromptPart {
 export interface PromptDef {
   key: string;
   label: string;
-  category: 'Story' | 'Illustration';
+  category: PromptCategory;
   description: string;
   color: string;
   /** Variables apply to BOTH System and User tabs. */
   variables: string[];
   parts: PromptPart[];   // always [system, user]
 }
+
+// Keep category type open to 'Character' alongside existing 'Story' | 'Illustration'
+export type PromptCategory = 'Story' | 'Illustration' | 'Character';
 
 export const PROMPT_DEFS: PromptDef[] = [
   {
@@ -68,6 +71,36 @@ export const PROMPT_DEFS: PromptDef[] = [
     parts: [
       { id: 'system', label: 'System', icon: '⚙', overrideKey: 'coverPromptStyle', default: '' },
       { id: 'user', label: 'User', icon: '💬', overrideKey: 'coverPrompt', default: 'Children\'s picture book cover for "{{title}}". {{scene}}' },
+    ],
+  },
+  {
+    key: 'characterConsistency',
+    label: 'Character Consistency',
+    category: 'Character',
+    description: 'Controls how character descriptions are embedded in every scene prompt. {{characters}} is replaced with "Name: look; Name2: look2".',
+    color: '#34d399',
+    variables: ['{{characters}}'],
+    parts: [
+      {
+        id: 'system', label: 'System', icon: '⚙', overrideKey: 'characterClause',
+        default: 'Characters (always draw with exactly these features) — {{characters}}.',
+      },
+      { id: 'user', label: 'User', icon: '💬', overrideKey: 'characterClauseNotes', default: '' },
+    ],
+  },
+  {
+    key: 'photoHeroPrompt',
+    label: 'Photo → Hero Portrait',
+    category: 'Character',
+    description: 'Base portrait prompt used when generating a cartoon hero from a photo. {{characterClause}} is replaced with the active character consistency clause.',
+    color: '#f59e0b',
+    variables: ['{{characterClause}}'],
+    parts: [
+      {
+        id: 'system', label: 'System', icon: '⚙', overrideKey: 'photoHeroPrompt',
+        default: 'Portrait of a cute cartoon child character. {{characterClause}}',
+      },
+      { id: 'user', label: 'User', icon: '💬', overrideKey: 'photoHeroPromptNotes', default: '' },
     ],
   },
 ];

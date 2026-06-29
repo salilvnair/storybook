@@ -10,6 +10,7 @@ export function LibraryConfig() {
   const { prefs, set, save } = usePrefsStore();
 
   return (
+    <div className="story-tab-scroll">
     <div className="bs-settings-pane bs-custom-provider-pane ie-pane">
       <div className="bs-settings-section-head">
         <span style={{ fontSize: 15 }}>📚</span>
@@ -84,6 +85,7 @@ export function LibraryConfig() {
       <div className="ie-save-row">
         <SaveButton onSave={save} label="Save reader settings" />
       </div>
+    </div>
     </div>
   );
 }

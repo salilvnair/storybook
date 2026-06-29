@@ -2,7 +2,7 @@
  * In-memory prompt overrides set from the Prompt Library tab. Single-user app,
  * so a global store is fine. Empty values fall back to the built-in defaults.
  */
-const KEYS = ['storySystem', 'storyUser', 'sceneStyle', 'sceneStyleUser', 'coverPrompt', 'coverPromptStyle'];
+const KEYS = ['storySystem', 'storyUser', 'sceneStyle', 'sceneStyleUser', 'coverPrompt', 'coverPromptStyle', 'characterClause', 'characterClauseNotes', 'photoHeroPrompt', 'photoHeroPromptNotes'];
 const overrides = Object.fromEntries(KEYS.map((k) => [k, '']));
 
 export function getPromptOverrides() {

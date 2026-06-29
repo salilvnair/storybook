@@ -16,11 +16,15 @@ import { getConversation, appendMessage, setStory, resetConversation } from '../
 import { getPromptOverrides, setPromptOverrides } from '../store/prompts.js';
 import { activeProviderOverride } from '../store/provider.js';
 import { registerSse, unregisterSse, emitSse } from '../store/sse-bus.js';
+import {
+  DEFAULT_SCENE_STYLE,
+  DEFAULT_COVER_PROMPT,
+  DEFAULT_CHARACTER_CLAUSE,
+  DEFAULT_PHOTO_HERO_PROMPT,
+} from '../services/prompt-templates.js';
 
-const DEFAULT_SCENE_STYLE =
-  "bright flat cartoon illustration for a young children's picture book, thick black outlines, " +
-  'bold pastel colours, big expressive eyes, cute characters, simple clean background';
-const DEFAULT_COVER_PROMPT = 'Children\'s picture book cover for "{{title}}". {{scene}}';
+// Re-export for callers that import these from conversation.js
+export { DEFAULT_CHARACTER_CLAUSE, DEFAULT_PHOTO_HERO_PROMPT };
 
 export function conversationRouter() {
   const router = Router();
@@ -32,6 +36,8 @@ export function conversationRouter() {
       storyUser: '{{message}}',
       sceneStyle: DEFAULT_SCENE_STYLE,
       coverPrompt: DEFAULT_COVER_PROMPT,
+      characterClause: DEFAULT_CHARACTER_CLAUSE,
+      photoHeroPrompt: DEFAULT_PHOTO_HERO_PROMPT,
     });
   });
   router.post('/api/prompts', (req, res) => {

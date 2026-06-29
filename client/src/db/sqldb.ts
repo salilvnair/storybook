@@ -85,6 +85,19 @@ async function open(): Promise<Database> {
       image_engine TEXT,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS characters (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'hero',
+      species TEXT NOT NULL DEFAULT 'human',
+      age TEXT NOT NULL DEFAULT '',
+      look_description TEXT NOT NULL DEFAULT '',
+      traits_json TEXT NOT NULL DEFAULT '[]',
+      locked_seed INTEGER,
+      reference_image TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
   return db;
 }

@@ -157,6 +157,7 @@ export async function generateStream(engineId, url, prompt, opts = {}, onStep = 
   const seedRaw = opts.seed != null && opts.seed !== '' ? parseInt(String(opts.seed), 10) : undefined;
   const seed = seedRaw != null && !Number.isNaN(seedRaw) ? seedRaw : undefined;
   const reqBody = engine.buildBody({ ...opts, prompt, seed });
+  if (opts.referenceImage) reqBody.reference_image = opts.referenceImage;
 
   let res;
   try {
@@ -216,10 +217,11 @@ export async function generate(engineId, url, prompt, opts = {}) {
   const seed = seedRaw != null && !Number.isNaN(seedRaw) ? seedRaw : undefined;
 
   const reqBody = engine.buildBody({ ...opts, prompt, seed });
+  if (opts.referenceImage) reqBody.reference_image = opts.referenceImage;
   const t0 = Date.now();
   const audit = (extra) => recordAiCall({
     stage: `Image (${engine.label})`, model: engine.model, ms: Date.now() - t0,
-    system: `${engine.label} @ ${base}`, user: prompt, request: reqBody, ...extra,
+    system: `${engine.label} @ ${base}`, user: prompt, request: { ...reqBody, reference_image: reqBody.reference_image ? '[b64]' : undefined }, ...extra,
   });
 
   let res;

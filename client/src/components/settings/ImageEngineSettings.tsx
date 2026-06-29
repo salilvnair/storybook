@@ -117,8 +117,8 @@ export function ImageEngineSettings() {
 
       {/* Explicit save — settings auto-apply, but the button confirms + re-syncs the engine to the server. */}
       <div className="ie-save-row">
-        <SaveButton onSave={save} label="Save engine settings" />
         <span className="ie-save-hint">{url ? `Active: ${eng?.label} → ${url}` : 'Set a URL above (local Mac or RunPod) to enable generation.'}</span>
+        <SaveButton onSave={save} label="Save engine settings" />
       </div>
     </div>
   );

@@ -7,12 +7,13 @@
  * is attached, shows a "Generate Storybook" card that pushes the story into the
  * story-store and kicks off image generation on the canvas.
  */
-import { useMemo, useCallback, useState } from 'react';
+import { useMemo, useCallback, useState, useEffect } from 'react';
 import { ConvEngineChat } from '@salilvnair/convengine-chat';
 import { MarkdownView } from '@salilvnair/dui';
 import { useStoryStore, type Story } from '../store/story-store';
 import { useSettingsStore } from '../store/settings-store';
 import { useTemplatesStore } from '../store/templates-store';
+import { useCharactersStore } from '../store/characters-store';
 import { TemplateSchematic } from './template/TemplateSchematic';
 import { ConvHistoryBox } from './chat/ConvHistoryBox';
 
@@ -22,6 +23,53 @@ const LANDING_CHIPS = [
   { chipText: '🌙 Bedtime adventure', chatText: 'A gentle bedtime story about a sleepy bunny who counts the stars. 5 short scenes for a 3 year old.' },
   { chipText: '🦁 Sharing is caring', chatText: 'A funny story about a lion cub who learns to share his toys. 5 scenes with a warm moral.' },
 ];
+
+function CastPicker() {
+  const { characters, selectedIds, toggleSelected, load } = useCharactersStore();
+
+  useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (characters.length === 0) return null;
+
+  return (
+    <div style={{
+      margin: '8px 0', padding: '8px 10px',
+      background: 'rgba(52,211,153,0.06)', borderRadius: 8,
+      border: '1px solid rgba(52,211,153,0.15)',
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: '#34d399', marginBottom: 6, letterSpacing: '0.04em' }}>
+        🧬 CAST — characters in this story
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {characters.map((c) => {
+          const on = selectedIds.includes(c.id);
+          return (
+            <button key={c.id} onClick={() => toggleSelected(c.id)} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 9px', borderRadius: 6, cursor: 'pointer',
+              fontSize: 12, fontWeight: on ? 600 : 400,
+              background: on ? 'rgba(52,211,153,0.18)' : 'rgba(255,255,255,0.05)',
+              border: `1px solid ${on ? 'rgba(52,211,153,0.5)' : 'rgba(255,255,255,0.1)'}`,
+              color: on ? '#34d399' : 'var(--color-text-secondary)',
+              transition: 'all 0.15s',
+            }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: on ? '#34d399' : 'rgba(255,255,255,0.2)', flexShrink: 0,
+              }} />
+              {c.name}
+            </button>
+          );
+        })}
+      </div>
+      {selectedIds.length > 0 && (
+        <div style={{ fontSize: 10, color: 'var(--color-text-muted)', marginTop: 5 }}>
+          {selectedIds.length} character{selectedIds.length > 1 ? 's' : ''} selected — look descriptions will be injected into every scene prompt
+        </div>
+      )}
+    </div>
+  );
+}
 
 function StoryReadyCard({ story }: { story: Story }) {
   const setStory = useStoryStore((s) => s.setStory);
@@ -84,6 +132,8 @@ function StoryReadyCard({ story }: { story: Story }) {
           ))}
         </div>
       )}
+
+      {!generating && !done && <CastPicker />}
 
       {/* ck8t/cuda-id4-style progress card while generating */}
       {generating && (

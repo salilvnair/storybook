@@ -10,9 +10,20 @@
  *          k = scene k text (left) + scene k illustration (right)
  *        N+1 = "The End" back-cover
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useStoryStore } from '../../store/story-store';
+import { useCharactersStore } from '../../store/characters-store';
 import type { GenStep } from '../../store/story-store';
+
+type NarrStatus = 'idle' | 'loading' | 'ready' | 'error';
+interface NarrState { status: NarrStatus; url?: string; error?: string }
+
+function base64ToBlob(b64: string, mime: string) {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}
 
 interface Turn { dir: 1 | -1; rot: number; settling?: 'commit' | 'revert' }
 
@@ -50,8 +61,16 @@ const RegenIcon = () => (
 
 export function LiveBookFlip() {
   const { story, cover, pages, phase, progress, genStep, regenerating, regeneratingCover, regeneratePage, regenerateCover } = useStoryStore();
+  const heroSeed = useCharactersStore((s) => {
+    const selected = s.characters.filter((c) => s.selectedIds.includes(c.id));
+    const hero = selected.find((c) => c.role === 'hero') ?? selected[0];
+    return hero?.lockedSeed ?? null;
+  });
   const [s, setS] = useState(0);
   const [turn, setTurn] = useState<Turn | null>(null);
+  const [narr, setNarr] = useState<Record<number, NarrState>>({});
+  const [playingPage, setPlayingPage] = useState<number | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const bookRef = useRef<HTMLDivElement>(null);
   const active = useRef(false);
@@ -91,6 +110,9 @@ export function LiveBookFlip() {
       );
     }
     const sc = story?.scenes[k - 1];
+    const narrText = [sc?.narration, sc?.says && `"${sc.says}"`, sc?.thinks].filter(Boolean).join(' ');
+    const ns = narr[k] ?? { status: 'idle' as NarrStatus };
+    const isDonePhase = phase === 'done';
     return (
       <div className="bp-text">
         <div className="bp-num">Page {k}</div>
@@ -98,6 +120,31 @@ export function LiveBookFlip() {
         <p className="bp-narr">{sc?.narration}</p>
         {sc?.says && <div className="bp-bubble bp-says">💬 &ldquo;{sc.says}&rdquo;</div>}
         {sc?.thinks && <div className="bp-bubble bp-thinks">💭 {sc.thinks}</div>}
+        {isDonePhase && (
+          <div className="lbf-narr-bar">
+            {ns.status === 'idle' && (
+              <button className="lbf-narr-btn" onClick={() => void narratePage(k, narrText)}>🔊 Read aloud</button>
+            )}
+            {ns.status === 'loading' && (
+              <span className="lbf-narr-loading">
+                <span className="story-progress-spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }} />
+                Synthesising…
+              </span>
+            )}
+            {ns.status === 'ready' && (
+              <div className="lbf-narr-player">
+                <button className="lbf-narr-play" onClick={() => togglePlay(k)}>
+                  {playingPage === k ? '⏸' : '▶'}
+                </button>
+                <span className="lbf-narr-label">Read aloud</span>
+                <button className="lbf-narr-re" onClick={() => void narratePage(k, narrText)} title="Re-synthesise">↺</button>
+              </div>
+            )}
+            {ns.status === 'error' && (
+              <button className="lbf-narr-btn lbf-narr-err" onClick={() => void narratePage(k, narrText)}>⚠ Retry</button>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -112,6 +159,11 @@ export function LiveBookFlip() {
       e.stopPropagation();
       if (k === 0) void regenerateCover();
       else void regeneratePage(k - 1);
+    };
+    const onRegenLocked = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      if (k === 0) void regenerateCover();
+      else void regeneratePage(k - 1, undefined, heroSeed);
     };
 
     if (k === 0) {
@@ -158,7 +210,16 @@ export function LiveBookFlip() {
           <div className={`lbf-regen-overlay${isRegenThis ? ' lbf-regen-busy' : ''}`}>
             {isRegenThis
               ? <span className="story-progress-spinner" />
-              : <button className="lbf-regen-btn" onClick={onRegen} title={`Regenerate page ${k}`}><RegenIcon /></button>
+              : (
+                <>
+                  <button className="lbf-regen-btn" onClick={onRegen} title={`Regenerate page ${k}`}><RegenIcon /></button>
+                  {heroSeed != null && (
+                    <button className="lbf-regen-btn lbf-regen-lock" onClick={onRegenLocked}
+                      title={`Re-roll with character lock (seed ${heroSeed})`}
+                      style={{ fontSize: 13, padding: '4px 6px' }}>🔒</button>
+                  )}
+                </>
+              )
             }
           </div>
         )}
@@ -218,6 +279,43 @@ export function LiveBookFlip() {
   };
   const onSettleEnd = () => { if (turn?.settling) finishSettle(turn.settling === 'commit', turn.dir); };
   const jump = (i: number) => { if (!turn) setS(i); };
+
+  const narratePage = useCallback(async (pageIdx: number, text: string) => {
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
+    setPlayingPage(null);
+    setNarr((prev) => ({ ...prev, [pageIdx]: { status: 'loading' } }));
+    try {
+      const res = await fetch('/api/storybook/narrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+      const data = await res.json();
+      const fmt = data.format || 'wav';
+      const blob = base64ToBlob(data.audio_b64, `audio/${fmt}`);
+      const url = URL.createObjectURL(blob);
+      setNarr((prev) => ({ ...prev, [pageIdx]: { status: 'ready', url } }));
+      if (!audioRef.current) audioRef.current = new Audio();
+      audioRef.current.src = url;
+      audioRef.current.onended = () => setPlayingPage(null);
+      void audioRef.current.play();
+      setPlayingPage(pageIdx);
+    } catch (err) {
+      setNarr((prev) => ({ ...prev, [pageIdx]: { status: 'error', error: String(err) } }));
+    }
+  }, []);
+
+  const togglePlay = useCallback((pageIdx: number) => {
+    if (!audioRef.current) return;
+    if (playingPage === pageIdx && !audioRef.current.paused) {
+      audioRef.current.pause();
+      setPlayingPage(null);
+    } else {
+      void audioRef.current.play();
+      setPlayingPage(pageIdx);
+    }
+  }, [playingPage]);
 
   const frontShade = turn ? Math.min(0.55, Math.max(0, -turn.rot / FOLD) * 0.7) : 0;
   const backShade = turn ? Math.min(0.55, Math.max(0, (-turn.rot - 90) / 90) * 0.45) : 0;

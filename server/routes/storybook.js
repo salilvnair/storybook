@@ -13,8 +13,11 @@ import path from 'node:path';
 import { config } from '../config.js';
 import { ensureLoaded, generate as engineGenerate, generateStream as engineGenerateStream, engineList, status as engineStatus, getEngine } from '../services/engines/index.js';
 import { resolveImageConfig, getImageConfig, setImageConfig } from '../store/image-config.js';
+import { audioEngineList, audioEngineGenerate, audioEngineStatus } from '../services/audio-engines/index.js';
+import { resolveAudioConfig, getAudioConfig, setAudioConfig } from '../store/audio-config.js';
+import { DEFAULT_SCENE_STYLE, DEFAULT_COVER_PROMPT, DEFAULT_PHOTO_HERO_PROMPT } from '../services/prompt-templates.js';
 import { saveStory, listStories, getStory, storyFile, removeStory, patchStoryMeta } from '../store/story-library.js';
-import { buildScenePrompt } from '../services/storyAgent.js';
+import { buildScenePrompt, buildCharacterClause } from '../services/storyAgent.js';
 import { buildFromTemplate } from '../services/pdf-from-template.js';
 import { getConversation, resetConversation } from '../store/conversations.js';
 import { getPromptOverrides } from '../store/prompts.js';
@@ -76,6 +79,43 @@ export function storybookRouter() {
     }
   });
 
+  // ── Audio engines: list + config get/set ────────────────────────────────────
+  router.get('/api/engines/audio', (_req, res) => {
+    res.json({ engines: audioEngineList(), config: getAudioConfig() });
+  });
+  router.get('/api/audio-config', (_req, res) => res.json(getAudioConfig()));
+  router.post('/api/audio-config', (req, res) => res.json({ ok: true, config: setAudioConfig(req.body || {}) }));
+
+  // Health of the configured TTS engine
+  router.get('/api/audio-config/health', async (_req, res) => {
+    const { engine, url } = resolveAudioConfig();
+    const configured = !!url && !url.includes('REPLACE') && !url.includes('xxxxx');
+    if (!configured) return res.json({ engine, configured: false, ok: false });
+    try {
+      const s = await audioEngineStatus(url);
+      res.json({ engine, url, configured: true, ok: true, status: s.status || 'ok' });
+    } catch (err) {
+      res.json({ engine, url, configured: true, ok: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // Narrate a page — POST { text, voice?, speed?, format? }
+  router.post('/api/storybook/narrate', async (req, res) => {
+    const { text, voice, speed, format } = req.body || {};
+    if (!text) return res.status(400).json({ error: 'text is required' });
+    try {
+      const { engine, url, options } = resolveAudioConfig();
+      const data = await audioEngineGenerate(engine, url, text, {
+        voice: voice || options.voice,
+        speed: speed != null ? speed : options.speed,
+        format: format || options.format || 'wav',
+      });
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // ── Conversation reset (clear server-side history for a tab) ─────────────────
   router.post('/api/v1/conversation/reset/:id', (req, res) => {
     resetConversation(req.params.id);
@@ -112,7 +152,7 @@ export function storybookRouter() {
   });
 
   router.post('/api/storybook/generate', async (req, res) => {
-    const { story: bodyStory, conversationId, override, spec, features, meta: clientMeta } = req.body || {};
+    const { story: bodyStory, conversationId, override, spec, features, meta: clientMeta, cast } = req.body || {};
     const story = bodyStory || (conversationId ? getConversation(conversationId).story : null);
     const ft = features || { magicPrompt: true, autoLoadModel: true };
 
@@ -140,6 +180,9 @@ export function storybookRouter() {
     const baseStyle = (ov.sceneStyle && ov.sceneStyle.trim()) ? ov.sceneStyle : story.style;
     const style = (ov.sceneStyleUser && ov.sceneStyleUser.trim()) ? `${baseStyle}, ${ov.sceneStyleUser.trim()}` : baseStyle;
 
+    // Character consistency clause — injected into every scene + cover prompt.
+    const characterClause = buildCharacterClause(Array.isArray(cast) ? cast : [], ov.characterClause);
+
     // Resolve the active image engine + URL + options (per-request override wins).
     const { engine, url: engineUrl, options: engineOpts } = resolveImageConfig(override);
     const imgOpts = {
@@ -149,6 +192,7 @@ export function storybookRouter() {
       preset: engineOpts.preset,
       steps: engineOpts.steps,
       negativePrompt: engineOpts.negativePrompt,
+      model: engineOpts.model || '',
     };
     const genImage = (prompt, extra = {}) => engineGenerateStream(
       engine, engineUrl, prompt, { ...imgOpts, ...extra },
@@ -167,9 +211,10 @@ export function storybookRouter() {
       const sceneDesc = scenes[0]?.image_prompt || scenes[0]?.narration || '';
       const coverBody = (ov.coverPrompt && ov.coverPrompt.trim())
         ? ov.coverPrompt.replace(/\{\{title\}\}/g, story.title).replace(/\{\{scene\}\}/g, sceneDesc)
-        : `Children's picture book cover for "${story.title}". ${sceneDesc}`;
+        : DEFAULT_COVER_PROMPT.replace('{{title}}', story.title).replace('{{scene}}', sceneDesc);
       const coverStylePrefix = (ov.coverPromptStyle && ov.coverPromptStyle.trim()) ? `${ov.coverPromptStyle.trim()}. ` : '';
-      const coverPrompt = `${coverStylePrefix}${coverBody}. Style: ${style}.`;
+      const coverCharClause = characterClause ? ` ${characterClause}` : '';
+      const coverPrompt = `${coverStylePrefix}${coverBody}.${coverCharClause} Style: ${style}.`;
       progress(`Painting the cover…`);
       let coverB64 = '';
       try {
@@ -185,7 +230,7 @@ export function storybookRouter() {
       for (let i = 0; i < scenes.length; i++) {
         const scene = scenes[i];
         progress(`Illustrating scene ${i + 1} of ${scenes.length}: ${scene.title}`);
-        const prompt = buildScenePrompt(scene, style);
+        const prompt = buildScenePrompt(scene, style, characterClause);
         try {
           const img = await genImage(prompt);
           sceneImages[i] = img.image_b64 || '';
@@ -247,15 +292,17 @@ export function storybookRouter() {
   // ── Regenerate a single scene's image (S2.02) ───────────────────────────────
   router.post('/api/storybook/regenerate-scene', async (req, res) => {
     try {
-      const { scene, style, override } = req.body || {};
+      const { scene, style, override, cast, lockedSeed } = req.body || {};
       if (!scene) return res.status(400).json({ error: 'scene required' });
       const ov = getPromptOverrides();
-      const useStyle = style || (ov.sceneStyle && ov.sceneStyle.trim()) || 'bright flat cartoon illustration for a children picture book';
-      const prompt = buildScenePrompt(scene, useStyle);
+      const useStyle = style || (ov.sceneStyle && ov.sceneStyle.trim()) || DEFAULT_SCENE_STYLE;
+      const clause = buildCharacterClause(Array.isArray(cast) ? cast : [], ov.characterClause);
+      const prompt = buildScenePrompt(scene, useStyle, clause);
       const { engine, url, options } = resolveImageConfig(override);
       const img = await engineGenerate(engine, url, prompt, {
         aspect_ratio: options.aspect_ratio || '1:1', magic: options.magic, preset: options.preset,
-        steps: options.steps, negativePrompt: options.negativePrompt,
+        steps: options.steps, negativePrompt: options.negativePrompt, model: options.model || '',
+        ...(lockedSeed != null ? { seed: lockedSeed } : {}),
       });
       res.json({ image_b64: img.image_b64, seed: img.seed });
     } catch (err) {
@@ -266,7 +313,7 @@ export function storybookRouter() {
   // ── Regenerate the cover image ──────────────────────────────────────────────
   router.post('/api/storybook/regenerate-cover', async (req, res) => {
     try {
-      const { story, override } = req.body || {};
+      const { story, override, cast } = req.body || {};
       if (!story) return res.status(400).json({ error: 'story required' });
       const ov = getPromptOverrides();
       const baseStyle = (ov.sceneStyle && ov.sceneStyle.trim()) ? ov.sceneStyle : story.style;
@@ -274,14 +321,71 @@ export function storybookRouter() {
       const sceneDesc = story.scenes?.[0]?.image_prompt || story.scenes?.[0]?.narration || '';
       const coverBody = (ov.coverPrompt && ov.coverPrompt.trim())
         ? ov.coverPrompt.replace(/\{\{title\}\}/g, story.title).replace(/\{\{scene\}\}/g, sceneDesc)
-        : `Children's picture book cover for "${story.title}". ${sceneDesc}`;
+        : DEFAULT_COVER_PROMPT.replace('{{title}}', story.title).replace('{{scene}}', sceneDesc);
       const coverStylePrefix = (ov.coverPromptStyle && ov.coverPromptStyle.trim()) ? `${ov.coverPromptStyle.trim()}. ` : '';
-      const prompt = `${coverStylePrefix}${coverBody}. Style: ${style}.`;
+      const clause = buildCharacterClause(Array.isArray(cast) ? cast : [], ov.characterClause);
+      const coverCharClause = clause ? ` ${clause}` : '';
+      const prompt = `${coverStylePrefix}${coverBody}.${coverCharClause} Style: ${style}.`;
       const { engine, url, options } = resolveImageConfig(override);
       const img = await engineGenerate(engine, url, prompt, {
-        aspect_ratio: '1:1', magic: options.magic, preset: options.preset, steps: options.steps, negativePrompt: options.negativePrompt,
+        aspect_ratio: '1:1', magic: options.magic, preset: options.preset, steps: options.steps, negativePrompt: options.negativePrompt, model: options.model || '',
       });
       res.json({ image_b64: img.image_b64, seed: img.seed });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
+  // ── Photo → Hero (S15) ─────────────────────────────────────────────────────
+  // Privacy-first: only routes to local engine URLs (localhost / LAN).
+  // The photo is never written to disk — processed in memory, returned as base64.
+  router.post('/api/storybook/photo-to-hero', async (req, res) => {
+    try {
+      const { photo_b64, artStyle, consentGiven, cast, variantCount = 2 } = req.body || {};
+      if (!consentGiven) return res.status(400).json({ error: 'Consent is required before processing photos.' });
+      if (!photo_b64) return res.status(400).json({ error: 'photo_b64 required' });
+
+      const ov = getPromptOverrides();
+      const { engine, url, options } = resolveImageConfig();
+
+      // Privacy gate: only local engine URLs are allowed for photo processing.
+      const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(url || '');
+      if (!isLocal) {
+        return res.status(403).json({
+          error: 'Photo → Hero requires a local image engine (localhost / LAN). Configure a local engine URL in Settings → Providers.',
+          requiresLocal: true,
+        });
+      }
+
+      const style = artStyle || (ov.sceneStyle && ov.sceneStyle.trim()) || DEFAULT_SCENE_STYLE;
+      const characterClause = buildCharacterClause(Array.isArray(cast) ? cast : [], ov.characterClause);
+      const heroTemplate = (ov.photoHeroPrompt && ov.photoHeroPrompt.trim()) ? ov.photoHeroPrompt : DEFAULT_PHOTO_HERO_PROMPT;
+      const heroBase = heroTemplate.replace('{{characterClause}}', characterClause ? characterClause + ' ' : '').trimEnd();
+      const prompt = `${heroBase} Style: ${style}.`;
+
+      const imgOpts = {
+        aspect_ratio: '1:1',
+        magic: options.magic,
+        preset: options.preset,
+        steps: options.steps,
+        negativePrompt: options.negativePrompt,
+        model: options.model || '',
+        referenceImage: photo_b64,
+      };
+
+      const count = Math.min(Math.max(1, parseInt(String(variantCount), 10) || 2), 4);
+      const tasks = Array.from({ length: count }, () => engineGenerate(engine, url, prompt, imgOpts));
+      const results = await Promise.allSettled(tasks);
+
+      const variants = results
+        .filter((r) => r.status === 'fulfilled' && r.value?.image_b64)
+        .map((r) => ({ image_b64: r.value.image_b64, seed: r.value.seed }));
+
+      if (variants.length === 0) {
+        throw new Error('Image engine returned no results. Check that it is running and reachable.');
+      }
+
+      res.json({ variants });
     } catch (err) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
