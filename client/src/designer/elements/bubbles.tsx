@@ -89,9 +89,18 @@ function drawShout(ctx: Ctx, w: number, h: number) {
 
 function BubbleText({ el }: { el: DesignerElement }) {
   const tl = tailLenFor(el.h, str(el.props.tail, 'center') as TailSide);
+  const bh = el.h - tl;
+  // Counter-flip: XOR of parent-group flip and per-element text flip keeps text readable
+  const netFlipH = ((el.scaleX ?? 1) < 0) !== !!el.props.textFlipH;
+  const netFlipV = ((el.scaleY ?? 1) < 0) !== !!el.props.textFlipV;
   return (
-    <Text width={el.w} height={el.h - tl} text={str(el.props.text, '')} align="center" verticalAlign="middle" padding={14}
-      fontSize={num(el.props.fontSize, 20)} fill={str(el.props.textFill, '#2e2426')} fontFamily="Baloo 2, system-ui" fontStyle="bold" />
+    <Text
+      x={netFlipH ? el.w : 0} y={netFlipV ? bh : 0}
+      scaleX={netFlipH ? -1 : 1} scaleY={netFlipV ? -1 : 1}
+      width={el.w} height={bh}
+      text={str(el.props.text, '')} align="center" verticalAlign="middle" padding={14}
+      fontSize={num(el.props.fontSize, 20)} fill={str(el.props.textFill, '#2e2426')} fontFamily="Baloo 2, system-ui" fontStyle="bold"
+    />
   );
 }
 
@@ -184,13 +193,18 @@ registry.register({
     { key: 'fontSize', label: 'Text size', control: 'slider' as const, min: 8, max: 72, step: 1 },
     { key: 'strokeWidth', label: 'Outline width', control: 'slider' as const, min: 0, max: 10, step: 1 },
   ],
-  render: (el) => (
-    <Group>
-      <BubbleShape el={el} draw={(ctx, w, h) => drawShout(ctx, w, h)} />
-      <Text width={el.w} height={el.h} text={str(el.props.text, '')} align="center" verticalAlign="middle"
-        fontSize={num(el.props.fontSize, 32)} fill={str(el.props.textFill, '#b45309')} fontFamily="Baloo 2, system-ui" fontStyle="bold" />
-    </Group>
-  ),
+  render: (el) => {
+    const netFlipH = ((el.scaleX ?? 1) < 0) !== !!el.props.textFlipH;
+    const netFlipV = ((el.scaleY ?? 1) < 0) !== !!el.props.textFlipV;
+    return (
+      <Group>
+        <BubbleShape el={el} draw={(ctx, w, h) => drawShout(ctx, w, h)} />
+        <Text x={netFlipH ? el.w : 0} y={netFlipV ? el.h : 0} scaleX={netFlipH ? -1 : 1} scaleY={netFlipV ? -1 : 1}
+          width={el.w} height={el.h} text={str(el.props.text, '')} align="center" verticalAlign="middle"
+          fontSize={num(el.props.fontSize, 32)} fill={str(el.props.textFill, '#b45309')} fontFamily="Baloo 2, system-ui" fontStyle="bold" />
+      </Group>
+    );
+  },
 });
 
 // ── Whisper (dashed) ────────────────────────────────────────────────────────
@@ -247,7 +261,12 @@ registry.register({
           }}
           fill={fill} stroke={stroke} strokeWidth={sw} lineJoin="round"
         />
-        <Text width={el.w} height={bh} text={str(el.props.text, '')} align="center" verticalAlign="middle" padding={20}
+        <Text
+          x={((el.scaleX ?? 1) < 0) !== !!el.props.textFlipH ? el.w : 0}
+          y={((el.scaleY ?? 1) < 0) !== !!el.props.textFlipV ? bh : 0}
+          scaleX={((el.scaleX ?? 1) < 0) !== !!el.props.textFlipH ? -1 : 1}
+          scaleY={((el.scaleY ?? 1) < 0) !== !!el.props.textFlipV ? -1 : 1}
+          width={el.w} height={bh} text={str(el.props.text, '')} align="center" verticalAlign="middle" padding={20}
           fontSize={num(el.props.fontSize, 20)} fill={str(el.props.textFill, '#2e2426')} fontFamily="Baloo 2, system-ui" fontStyle="bold" />
       </Group>
     );

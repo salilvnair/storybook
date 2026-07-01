@@ -80,8 +80,12 @@ registry.register({
     const fontStyle = `${bold ? 'bold' : ''}${bold && italic ? ' ' : ''}${italic ? 'italic' : ''}` || 'normal';
     const underline = bool(el.props.underline);
     const strokeW = num(el.props.strokeWidth, 0);
+    const netFlipH = ((el.scaleX ?? 1) < 0) !== !!el.props.textFlipH;
+    const netFlipV = ((el.scaleY ?? 1) < 0) !== !!el.props.textFlipV;
     return (
       <Text
+        x={netFlipH ? el.w : 0} y={netFlipV ? el.h : 0}
+        scaleX={netFlipH ? -1 : 1} scaleY={netFlipV ? -1 : 1}
         width={el.w} height={el.h}
         text={str(el.props.text, '')}
         fontSize={num(el.props.fontSize, 28)}
@@ -174,16 +178,22 @@ registry.register({
     { key: 'opacity', label: 'Opacity', control: 'slider', min: 0, max: 1, step: 0.05 },
     ...SHADOW_FIELDS,
   ],
-  render: (el: DesignerElement) => (
-    <Text
-      width={el.w} height={el.h}
-      text={str(el.props.emoji, '⭐')}
-      fontSize={num(el.props.size, 56)}
-      align="center" verticalAlign="middle"
-      opacity={num(el.props.opacity, 1)}
-      {...shadowProps(el)}
-    />
-  ),
+  render: (el: DesignerElement) => {
+    const netFlipH = ((el.scaleX ?? 1) < 0) !== !!el.props.textFlipH;
+    const netFlipV = ((el.scaleY ?? 1) < 0) !== !!el.props.textFlipV;
+    return (
+      <Text
+        x={netFlipH ? el.w : 0} y={netFlipV ? el.h : 0}
+        scaleX={netFlipH ? -1 : 1} scaleY={netFlipV ? -1 : 1}
+        width={el.w} height={el.h}
+        text={str(el.props.emoji, '⭐')}
+        fontSize={num(el.props.size, 56)}
+        align="center" verticalAlign="middle"
+        opacity={num(el.props.opacity, 1)}
+        {...shadowProps(el)}
+      />
+    );
+  },
 });
 
 // ── Image — S-D9.08 filters + S-D9.09 clip-to-shape ─────────────────────────

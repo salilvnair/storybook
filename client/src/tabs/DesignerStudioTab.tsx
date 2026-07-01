@@ -15,7 +15,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Stage, Layer, Group, Rect, Line, Image as KImage, Transformer } from 'react-konva';
 import type Konva from 'konva';
-import { ButtonView, IconButtonView, TextInputView, SelectInputView, SliderView, ContextMenuView, SplitPanelView, SearchInputView, type SelectOption, type ContextMenuItem } from '@salilvnair/dui';
+import { ButtonView, IconButtonView, TextInputView, SelectInputView, SliderView, ContextMenuView, SplitPanelView, SearchInputView, SegmentedView, type SelectOption, type ContextMenuItem } from '@salilvnair/dui';
 import { SidebarLeftIcon, SidebarRightIcon, SearchIcon, ChevronRightIcon, EyeIcon, EyeOffIcon, ArrowUpIcon, ArrowDownIcon, MoreHorizontalIcon, TrashIcon, CopyIcon, PasteIcon, DuplicateIcon, LockIcon, AgentIcon, UndoIcon, RotateCWIcon, FlipHIcon, FlipVIcon, ResetIcon, ShieldIcon } from '../icons';
 import { registry, newElement, type DesignerElement } from '../designer/registry';
 import { useAIEdit } from '../components/edit/use-ai-edit';
@@ -768,7 +768,9 @@ export function DesignerStudioTab() {
 
   const nodeRefs = useRef<Map<string, Konva.Node>>(new Map());
   const trRef = useRef<Konva.Transformer>(null);
+  const stageRef = useRef<Konva.Stage>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [canvasMenuPos, setCanvasMenuPos] = useState<{ x: number; y: number } | null>(null);
 
   // Derived: first selected element (for Inspector)
   const selectedId = selectedIds[0] ?? null;
@@ -909,6 +911,11 @@ export function DesignerStudioTab() {
     patch(id, { rotation: 0, scaleX: 1, scaleY: 1, x: trueX, y: trueY });
   };
 
+  // ── Text-only flip (toggles props.textFlipH / textFlipV, countered in element renderers) ──
+  const flipTextH = (id: string) => { const el = elements.find((e) => e.id === id); if (!el) return; patchProps(id, { textFlipH: !el.props.textFlipH }); };
+  const flipTextV = (id: string) => { const el = elements.find((e) => e.id === id); if (!el) return; patchProps(id, { textFlipV: !el.props.textFlipV }); };
+  const resetTextFlips = (id: string) => patchProps(id, { textFlipH: false, textFlipV: false });
+
   // S-D9.11 — delete all selected
   const removeSel = () => {
     if (!selectedIds.length) return;
@@ -945,35 +952,78 @@ export function DesignerStudioTab() {
     const copy = { ...clipboard, id: `el-${Date.now()}`, x: clipboard.x + 24, y: clipboard.y + 24, props: { ...clipboard.props } };
     commit([...elements, copy], elements); selectOne(copy.id);
   };
-  const closeMenu = () => { setMenuAnchor(null); setMenuElId(null); };
+  const closeMenu = () => { setMenuAnchor(null); setMenuElId(null); setCanvasMenuPos(null); };
+
+  const [saving, setSaving] = useState(false);
+  const saveDesignToStory = useCallback(async () => {
+    if (!bgStoryId || !bgSlot) {
+      window.alert('Select a story and page in the Page Background section first, then Save.');
+      return;
+    }
+    setSaving(true);
+    try {
+      let b64: string;
+      if (dsMode === 'ai' && editSrc) {
+        b64 = editSrc.replace(/^data:image\/[^;]+;base64,/, '');
+      } else {
+        const stage = stageRef.current;
+        if (!stage) return;
+        const dataUrl = stage.toDataURL({ pixelRatio: 2 });
+        b64 = dataUrl.replace(/^data:image\/[^;]+;base64,/, '');
+      }
+      await fetch(`/api/stories/${bgStoryId}/image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot: bgSlot, image_b64: b64 }),
+      });
+    } finally {
+      setSaving(false);
+    }
+  }, [bgStoryId, bgSlot, dsMode, editSrc]);
 
   const menuEl = elements.find((e) => e.id === menuElId) || null;
+  const shapeFlipChildren: ContextMenuItem[] = menuEl ? [
+    { id: 'srot90ccw', label: 'Rotate 90° Left',  icon: <UndoIcon size={14} />,    iconColor: '#f59e0b', onClick: () => { rotate90CCW(menuEl.id); closeMenu(); } },
+    { id: 'srot90cw',  label: 'Rotate 90° Right', icon: <RotateCWIcon size={14} />, iconColor: '#f59e0b', onClick: () => { rotate90CW(menuEl.id);  closeMenu(); } },
+    { id: 'srot180',   label: 'Rotate 180°',       icon: <RotateCWIcon size={14} style={{ opacity: 0.6 }} />, iconColor: '#f59e0b', onClick: () => { rotate180(menuEl.id); closeMenu(); } },
+    { id: 'sfsep1',    label: '', separator: true },
+    { id: 'sfliph',    label: 'Flip Horizontal',   icon: <FlipHIcon size={14} />,   iconColor: '#0ea5e9', onClick: () => { flipHorizontal(menuEl.id); closeMenu(); } },
+    { id: 'sflipv',    label: 'Flip Vertical',     icon: <FlipVIcon size={14} />,   iconColor: '#0ea5e9', onClick: () => { flipVertical(menuEl.id);   closeMenu(); } },
+    { id: 'sfsep2',    label: '', separator: true },
+    { id: 'sresettr',  label: 'Reset Transforms',  icon: <ResetIcon size={14} />,   iconColor: '#94a3b8', onClick: () => { resetTransforms(menuEl.id); closeMenu(); } },
+  ] : [];
+
+  const textFlipChildren: ContextMenuItem[] = menuEl ? [
+    { id: 'trot90ccw', label: 'Rotate 90° Left',  icon: <UndoIcon size={14} />,    iconColor: '#f59e0b', onClick: () => { rotate90CCW(menuEl.id); closeMenu(); } },
+    { id: 'trot90cw',  label: 'Rotate 90° Right', icon: <RotateCWIcon size={14} />, iconColor: '#f59e0b', onClick: () => { rotate90CW(menuEl.id);  closeMenu(); } },
+    { id: 'trot180',   label: 'Rotate 180°',       icon: <RotateCWIcon size={14} style={{ opacity: 0.6 }} />, iconColor: '#f59e0b', onClick: () => { rotate180(menuEl.id); closeMenu(); } },
+    { id: 'tfsep1',    label: '', separator: true },
+    { id: 'tfliph',    label: 'Flip Horizontal',   icon: <FlipHIcon size={14} />,   iconColor: '#a78bfa', onClick: () => { flipTextH(menuEl.id); closeMenu(); } },
+    { id: 'tflipv',    label: 'Flip Vertical',     icon: <FlipVIcon size={14} />,   iconColor: '#a78bfa', onClick: () => { flipTextV(menuEl.id);  closeMenu(); } },
+    { id: 'tfsep2',    label: '', separator: true },
+    { id: 'tresettr',  label: 'Reset Text',        icon: <ResetIcon size={14} />,   iconColor: '#94a3b8', onClick: () => { resetTextFlips(menuEl.id); closeMenu(); } },
+  ] : [];
+
   const layerMenuItems: ContextMenuItem[] = menuEl ? [
-    { id: 'dup', label: 'Duplicate', icon: <DuplicateIcon size={14} />, shortcut: '⌘D', onClick: () => duplicateById(menuEl.id) },
-    { id: 'copy', label: 'Copy', icon: <CopyIcon size={14} />, shortcut: '⌘C', onClick: () => copyById(menuEl.id) },
-    { id: 'paste', label: 'Paste', icon: <PasteIcon size={14} />, shortcut: '⌘V', disabled: !clipboard, onClick: () => paste() },
+    { id: 'dup',  label: 'Duplicate', icon: <DuplicateIcon size={14} />, iconColor: '#6366f1', shortcut: '⌘D', onClick: () => duplicateById(menuEl.id) },
+    { id: 'copy', label: 'Copy',      icon: <CopyIcon size={14} />,      iconColor: '#8b5cf6', shortcut: '⌘C', onClick: () => copyById(menuEl.id) },
+    { id: 'paste',label: 'Paste',     icon: <PasteIcon size={14} />,     iconColor: '#64748b', shortcut: '⌘V', disabled: !clipboard, onClick: () => paste() },
     { id: 'sep1', label: '', separator: true },
     {
-      id: 'flip', label: 'Flip & Rotate', icon: <FlipHIcon size={14} />,
+      id: 'flip', label: 'Flip & Rotate', icon: <FlipHIcon size={14} />, iconColor: '#0ea5e9',
       children: [
-        { id: 'rot90ccw', label: 'Rotate 90° Left',   icon: <UndoIcon size={14} />,    onClick: () => { rotate90CCW(menuEl.id); closeMenu(); } },
-        { id: 'rot90cw',  label: 'Rotate 90° Right',  icon: <RotateCWIcon size={14} />, onClick: () => { rotate90CW(menuEl.id);  closeMenu(); } },
-        { id: 'rot180',   label: 'Rotate 180°',        icon: <RotateCWIcon size={14} style={{ opacity: 0.6 }} />, onClick: () => { rotate180(menuEl.id);  closeMenu(); } },
-        { id: 'fsep1',    label: '', separator: true },
-        { id: 'fliph',    label: 'Flip Horizontal',    icon: <FlipHIcon size={14} />,   onClick: () => { flipHorizontal(menuEl.id); closeMenu(); } },
-        { id: 'flipv',    label: 'Flip Vertical',      icon: <FlipVIcon size={14} />,   onClick: () => { flipVertical(menuEl.id);   closeMenu(); } },
-        { id: 'fsep2',    label: '', separator: true },
-        { id: 'resettr',  label: 'Reset Transforms',   icon: <ResetIcon size={14} />,   onClick: () => { resetTransforms(menuEl.id); closeMenu(); } },
+        { id: 'flip-shape', label: 'Shape', icon: <FlipVIcon size={14} />, iconColor: '#0ea5e9', children: shapeFlipChildren },
+        { id: 'flip-text',  label: 'Text',  icon: <FlipHIcon size={14} />, iconColor: '#a78bfa', children: textFlipChildren  },
       ],
     },
     { id: 'sep2', label: '', separator: true },
-    { id: 'vis', label: menuEl.hidden ? 'Show' : 'Hide', icon: menuEl.hidden ? <EyeIcon size={14} /> : <EyeOffIcon size={14} />, onClick: () => toggleHidden(menuEl.id) },
-    { id: 'lock', label: menuEl.locked ? 'Unlock' : 'Lock', icon: <LockIcon size={14} />, onClick: () => toggleLocked(menuEl.id) },
+    { id: 'vis',  label: menuEl.hidden ? 'Show' : 'Hide', icon: menuEl.hidden ? <EyeIcon size={14} /> : <EyeOffIcon size={14} />, iconColor: '#f59e0b', onClick: () => toggleHidden(menuEl.id) },
+    { id: 'lock', label: menuEl.locked ? 'Unlock' : 'Lock', icon: <LockIcon size={14} />, iconColor: '#eab308', onClick: () => toggleLocked(menuEl.id) },
     { id: 'sep3', label: '', separator: true },
-    { id: 'front', label: 'Bring to front', icon: <ArrowUpIcon size={14} />, onClick: () => { const i = elements.findIndex((e) => e.id === menuEl.id); reorder(i, elements.length - 1); } },
-    { id: 'back', label: 'Send to back', icon: <ArrowDownIcon size={14} />, onClick: () => { const i = elements.findIndex((e) => e.id === menuEl.id); reorder(i, 0); } },
+    { id: 'front', label: 'Bring to front', icon: <ArrowUpIcon size={14} />, iconColor: '#10b981', onClick: () => { const i = elements.findIndex((e) => e.id === menuEl.id); reorder(i, elements.length - 1); closeMenu(); } },
+    { id: 'back',  label: 'Send to back',   icon: <ArrowDownIcon size={14} />, iconColor: '#14b8a6', onClick: () => { const i = elements.findIndex((e) => e.id === menuEl.id); reorder(i, 0); closeMenu(); } },
     { id: 'sep4', label: '', separator: true },
-    { id: 'del', label: 'Delete', icon: <TrashIcon size={14} />, danger: true, shortcut: 'Del', onClick: () => deleteById(menuEl.id) },
+    { id: 'del',  label: 'Delete', icon: <TrashIcon size={14} />, danger: true, shortcut: 'Del', onClick: () => deleteById(menuEl.id) },
   ] : [];
 
   // ── Presets (S-D6) ───────────────────────────────────────────────────────
@@ -1216,124 +1266,141 @@ export function DesignerStudioTab() {
     .map((c) => ({ ...c, items: q ? c.items.filter((it) => it.label.toLowerCase().includes(q)) : c.items }))
     .filter((c) => c.items.length > 0);
   const paletteTotal = paletteCats.reduce((s, c) => s + c.items.length, 0);
+  const SPLIT_ACCENT = 'var(--story-accent-3)';
 
   const leftPaletteEl = (
     <aside className="set-sidebar ds-palette-v2">
-      <div className="set-search-wrap">
-        <SearchInputView value={paletteSearch} onChange={setPaletteSearch} placeholder="Search elements…" size="md"
-          prefix={<SearchIcon size={13} />}
-          suffix={!paletteSearch && paletteTotal > 0 ? <span className="set-search-count">{paletteTotal}</span> : undefined} />
-      </div>
-      {!paletteSearch && (
-        <div className="ds-bg-section">
-          <div className="ds-bg-label">Page Background</div>
-          <label className="ds-bg-field"><span>Story</span>
-            <SelectInputView options={[{ value: '', label: stories.length ? '— pick a story —' : 'No saved stories yet' }, ...stories.filter((s) => !s.archived).map((s) => ({ value: s.id, label: s.title }))]}
-              value={bgStoryId} onChange={(v) => { setBgStoryId(v); setBgSlot(v ? 'cover' : ''); }} size="sm" width="fw" />
-          </label>
-          <label className="ds-bg-field"><span>Page</span>
-            <SelectInputView options={[{ value: 'cover', label: 'Cover' }, ...Array.from({ length: stories.find((s) => s.id === bgStoryId)?.pageCount ?? 0 }, (_, i) => ({ value: String(i + 1), label: `Page ${i + 1}` }))]}
-              value={bgSlot} onChange={(v) => setBgSlot(v)} size="sm" width="fw" disabled={!bgStoryId} />
-          </label>
-          <ButtonView size="sm" variant="secondary" accentColor="#f87171" iconLeft={<TrashIcon size={13} />}
-            disabled={!bgStoryId} onClick={() => { setBgStoryId(''); setBgSlot(''); }} style={{ width: '100%', justifyContent: 'center' }}>
-            Remove background
-          </ButtonView>
-        </div>
-      )}
-      {/* ── S-D9.04 — AI Image Generation ─────────────────────────── */}
-      {!paletteSearch && (
-        <div className="ds-bg-section">
-          <div className="ds-bg-label">✨ AI Generate Image</div>
-          <div className="ds-ai-gen-field">
-            <TextInputView
-              size="sm"
-              value={aiGenPrompt}
-              onChange={(e) => setAiGenPrompt((e.target as HTMLInputElement).value)}
-              placeholder="Describe an image…"
-              onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') void generateAIImage(); }}
-            />
-            <ButtonView
-              size="sm"
-              variant="primary"
-              disabled={!aiGenPrompt.trim() || aiGenLoading}
-              onClick={() => void generateAIImage()}
-              title="Generate AI image and add to canvas"
-            >
-              {aiGenLoading ? '…' : '↗'}
-            </ButtonView>
-          </div>
-        </div>
-      )}
-      {/* ── S-D9.13 — Emoji Library ────────────────────────────────── */}
-      {!paletteSearch && (
-        <div className="ds-emoji-section">
-          <div className="ds-bg-label">Emoji Library</div>
-          {emojiFavs.length > 0 && (
-            <div className="ds-emoji-cat">
-              <span className="ds-emoji-cat-label">⭐ Favourites</span>
-              <div className="ds-emoji-grid">
-                {emojiFavs.map((em) => (
-                  <button
-                    key={em}
-                    className="ds-emoji-btn"
-                    title={`${em} · right-click to unfavourite`}
-                    onClick={() => addSticker(em)}
-                    onContextMenu={(e) => { e.preventDefault(); removeEmojiFromFavs(em); }}
-                  >{em}</button>
-                ))}
-              </div>
+      <SplitPanelView
+        direction="vertical"
+        defaultSplit={52}
+        minFirstPct={18}
+        minSecondPct={18}
+        accentColor={SPLIT_ACCENT}
+        style={{ flex: 1, minHeight: 0, width: '100%' }}
+        first={
+          <div className="ds-palette-top">
+            <div className="set-search-wrap">
+              <SearchInputView value={paletteSearch} onChange={setPaletteSearch} placeholder="Search elements…" size="md"
+                prefix={<SearchIcon size={13} />}
+                suffix={!paletteSearch && paletteTotal > 0 ? <span className="set-search-count">{paletteTotal}</span> : undefined} />
             </div>
-          )}
-          {EMOJI_LIBRARY.map((cat) => {
-            const isCatCollapsed = emojiCollapsed.has(cat.cat);
-            return (
-              <div key={cat.cat} className="ds-emoji-cat">
-                <button type="button" className="ds-emoji-cat-toggle" onClick={() => toggleEmojiCat(cat.cat)}>
-                  <ChevronRightIcon size={9} style={{ flexShrink: 0, opacity: 0.5, transform: isCatCollapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 140ms' }} />
-                  {cat.cat}
-                </button>
-                {!isCatCollapsed && (
-                  <div className="ds-emoji-grid">
-                    {cat.items.map((em) => (
-                      <button
-                        key={em}
-                        className="ds-emoji-btn"
-                        title={`${em} · right-click to favourite`}
-                        onClick={() => addSticker(em)}
-                        onContextMenu={(e) => { e.preventDefault(); addEmojiToFavs(em); }}
-                      >{em}</button>
-                    ))}
+            {!paletteSearch && (
+              <div className="ds-bg-section">
+                <div className="ds-bg-label">Page Background</div>
+                <label className="ds-bg-field"><span>Story</span>
+                  <SelectInputView options={[{ value: '', label: stories.length ? '— pick a story —' : 'No saved stories yet' }, ...stories.filter((s) => !s.archived).map((s) => ({ value: s.id, label: s.title }))]}
+                    value={bgStoryId} onChange={(v) => { setBgStoryId(v); setBgSlot(v ? 'cover' : ''); }} size="sm" width="fw" />
+                </label>
+                <label className="ds-bg-field"><span>Page</span>
+                  <SelectInputView options={[{ value: 'cover', label: 'Cover' }, ...Array.from({ length: stories.find((s) => s.id === bgStoryId)?.pageCount ?? 0 }, (_, i) => ({ value: String(i + 1), label: `Page ${i + 1}` }))]}
+                    value={bgSlot} onChange={(v) => setBgSlot(v)} size="sm" width="fw" disabled={!bgStoryId} />
+                </label>
+                <ButtonView size="sm" variant="secondary" accentColor="#f87171" iconLeft={<TrashIcon size={13} />}
+                  disabled={!bgStoryId} onClick={() => { setBgStoryId(''); setBgSlot(''); }} style={{ width: '100%', justifyContent: 'center' }}>
+                  Remove background
+                </ButtonView>
+              </div>
+            )}
+            {/* ── S-D9.04 — AI Image Generation ─────────────────────────── */}
+            {!paletteSearch && (
+              <div className="ds-bg-section">
+                <div className="ds-bg-label">✨ AI Generate Image</div>
+                <div className="ds-ai-gen-field">
+                  <TextInputView
+                    size="sm"
+                    value={aiGenPrompt}
+                    onChange={(e) => setAiGenPrompt((e.target as HTMLInputElement).value)}
+                    placeholder="Describe an image…"
+                    onKeyDown={(e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') void generateAIImage(); }}
+                  />
+                  <ButtonView
+                    size="sm"
+                    variant="primary"
+                    disabled={!aiGenPrompt.trim() || aiGenLoading}
+                    onClick={() => void generateAIImage()}
+                    title="Generate AI image and add to canvas"
+                  >
+                    {aiGenLoading ? '…' : '↗'}
+                  </ButtonView>
+                </div>
+              </div>
+            )}
+            {/* ── S-D9.13 — Emoji Library ────────────────────────────────── */}
+            {!paletteSearch && (
+              <div className="ds-emoji-section">
+                <div className="ds-bg-label">Emoji Library</div>
+                {emojiFavs.length > 0 && (
+                  <div className="ds-emoji-cat">
+                    <span className="ds-emoji-cat-label">⭐ Favourites</span>
+                    <div className="ds-emoji-grid">
+                      {emojiFavs.map((em) => (
+                        <button
+                          key={em}
+                          className="ds-emoji-btn"
+                          title={`${em} · right-click to unfavourite`}
+                          onClick={() => addSticker(em)}
+                          onContextMenu={(e) => { e.preventDefault(); removeEmojiFromFavs(em); }}
+                        >{em}</button>
+                      ))}
+                    </div>
                   </div>
                 )}
+                {EMOJI_LIBRARY.map((cat) => {
+                  const isCatCollapsed = emojiCollapsed.has(cat.cat);
+                  return (
+                    <div key={cat.cat} className="ds-emoji-cat">
+                      <button type="button" className="ds-emoji-cat-toggle" onClick={() => toggleEmojiCat(cat.cat)}>
+                        <ChevronRightIcon size={9} style={{ flexShrink: 0, opacity: 0.5, transform: isCatCollapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 140ms' }} />
+                        {cat.cat}
+                      </button>
+                      {!isCatCollapsed && (
+                        <div className="ds-emoji-grid">
+                          {cat.items.map((em) => (
+                            <button
+                              key={em}
+                              className="ds-emoji-btn"
+                              title={`${em} · right-click to favourite`}
+                              onClick={() => addSticker(em)}
+                              onContextMenu={(e) => { e.preventDefault(); addEmojiToFavs(em); }}
+                            >{em}</button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
-      )}
-      <div className="set-nav-list">
-        {paletteCats.length === 0 && <div className="set-nav-empty">No elements match "{paletteSearch}"</div>}
-        {paletteCats.map((cat) => {
-          const isCollapsed = paletteCollapsed.has(cat.id);
-          return (
-            <div key={cat.id}>
-              <button type="button" className="set-group-btn" onClick={() => togglePaletteCat(cat.id)}>
-                <ChevronRightIcon size={9} style={{ flexShrink: 0, color: 'var(--color-text-muted)', opacity: 0.5, transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 140ms ease' }} />
-                <span className="set-group-label">{cat.label}</span>
-                <span className="set-group-count">{cat.items.length}</span>
-              </button>
-              {!isCollapsed && cat.items.map((it) => (
-                <div key={it.key} className="ds-nav-row">
-                  <button className="set-nav ds-nav-add" onClick={it.onClick} title={it.label}>
-                    <span className="set-nav-icon">{it.icon}</span>{it.label}
-                  </button>
-                  {it.onDelete && <button className="ds-preset-del" title="Delete preset" onClick={it.onDelete}>✕</button>}
-                </div>
-              ))}
+            )}
+          </div>
+        }
+        second={
+          <div className="ds-palette-bottom">
+            <div className="set-nav-list">
+              {paletteCats.length === 0 && <div className="set-nav-empty">No elements match "{paletteSearch}"</div>}
+              {paletteCats.map((cat) => {
+                const isCollapsed = paletteCollapsed.has(cat.id);
+                return (
+                  <div key={cat.id}>
+                    <button type="button" className="set-group-btn" onClick={() => togglePaletteCat(cat.id)}>
+                      <ChevronRightIcon size={9} style={{ flexShrink: 0, color: 'var(--color-text-muted)', opacity: 0.5, transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)', transition: 'transform 140ms ease' }} />
+                      <span className="set-group-label">{cat.label}</span>
+                      <span className="set-group-count">{cat.items.length}</span>
+                    </button>
+                    {!isCollapsed && cat.items.map((it) => (
+                      <div key={it.key} className="ds-nav-row">
+                        <button className="set-nav ds-nav-add" onClick={it.onClick} title={it.label}>
+                          <span className="set-nav-icon">{it.icon}</span>{it.label}
+                        </button>
+                        {it.onDelete && <button className="ds-preset-del" title="Delete preset" onClick={it.onDelete}>✕</button>}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
+          </div>
+        }
+      />
     </aside>
   );
 
@@ -1341,6 +1408,7 @@ export function DesignerStudioTab() {
     <div className="ds-canvas-wrap">
       <div className="ds-canvas-scroll">
         <Stage
+          ref={stageRef}
           width={stageW * zoom} height={stageH * zoom} scaleX={zoom} scaleY={zoom} className="ds-stage"
           onMouseDown={handleStageMouseDown}
           onMouseMove={handleStageMouseMove}
@@ -1362,6 +1430,13 @@ export function DesignerStudioTab() {
                   opacity={el.opacity ?? 1}
                   globalCompositeOperation={(el.blendMode ?? 'source-over') as GlobalCompositeOperation}
                   ref={(n) => { if (n) nodeRefs.current.set(el.id, n); else nodeRefs.current.delete(el.id); }}
+                  onContextMenu={(e) => {
+                    e.evt.preventDefault();
+                    e.cancelBubble = true;
+                    if (!el.locked) selectOne(el.id);
+                    setMenuElId(el.id);
+                    setCanvasMenuPos({ x: e.evt.clientX, y: e.evt.clientY });
+                  }}
                   onMouseDown={(e) => {
                     e.cancelBubble = true;
                     if (el.locked) return;
@@ -1498,7 +1573,7 @@ export function DesignerStudioTab() {
   );
 
   // ── AI Edit panels (hook always mounted) ──────────────────────────────────
-  const { leftPanel: aiLeft, centerPanel: aiCenter, rightPanel: aiRight, isWholeImage: aiIsWholeImage, engineLabel: aiEngineLabel } = useAIEdit(
+  const { leftPanel: aiLeft, centerPanel: aiCenter, rightPanel: aiRight, toolbarSlot: aiToolbarSlot, isWholeImage: aiIsWholeImage, engineLabel: aiEngineLabel } = useAIEdit(
     editSrc ?? '',
     { onApply: (b64) => setEditSrc(`data:image/png;base64,${b64}`), stageW, stageH },
   );
@@ -1506,7 +1581,6 @@ export function DesignerStudioTab() {
   const activeCenter = dsMode === 'ai' ? aiCenter : canvasEl;
   const activeRight  = dsMode === 'ai' ? aiRight  : rightPanelEl;
 
-  const SPLIT_ACCENT = 'var(--story-accent-3)';
   const bodyEl = leftOpen ? (
     <SplitPanelView key={`split-dual-${dsMode}`} direction="horizontal" defaultSplit={22} minFirstPct={15} minSecondPct={70} accentColor={SPLIT_ACCENT} style={{ height: '100%', width: '100%' }}
       first={activeLeft}
@@ -1530,6 +1604,7 @@ export function DesignerStudioTab() {
           <IconButtonView size="sm" icon={<SidebarLeftIcon size={15} />} tooltip={leftOpen ? 'Hide left panel' : 'Show left panel'}
             accentColor={leftOpen ? 'var(--story-accent-3)' : 'var(--color-text-muted)'} onClick={() => setLeftOpen((v) => !v)} />
         </div>
+        {dsMode === 'ai' && aiToolbarSlot}
         {dsMode === 'manual' && <>
           <div className="ds-toolbar-sep" />
           <div className="ds-toolbar-group">
@@ -1597,10 +1672,18 @@ export function DesignerStudioTab() {
               title="AI Design Assistant — describe changes in plain English"
             ><AgentIcon size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />AI</ButtonView>
           </>}
-          <div className="lib-view-toggle" style={{ marginLeft: 15 }}>
-            <button type="button" className={`lib-vt-btn${dsMode === 'manual' ? ' is-active' : ''}`} onClick={() => setDsMode('manual')}>Manual</button>
-            <button type="button" className={`lib-vt-btn${dsMode === 'ai' ? ' is-active' : ''}`} onClick={async () => { if (editSrc === null) await startEdit(); setDsMode('ai'); }}>AI Edit</button>
-          </div>
+          <ButtonView size="sm" variant="primary" onClick={() => void saveDesignToStory()} disabled={saving || !bgStoryId} title={bgStoryId ? `Save canvas to story page (${bgSlot || 'cover'})` : 'Select a story in Page Background first'}>{saving ? 'Saving…' : 'Save'}</ButtonView>
+          <SegmentedView
+            size="sm"
+            accentColor="var(--story-accent-3)"
+            options={[{ id: 'manual', label: 'Manual' }, { id: 'ai', label: 'AI Edit' }]}
+            value={dsMode}
+            onChange={async (id) => {
+              if (id === 'ai' && editSrc === null) await startEdit();
+              setDsMode(id as 'manual' | 'ai');
+            }}
+            style={{ marginLeft: 15 }}
+          />
         </div>
         <div className="ds-toolbar-sep" />
         <div className="ds-toolbar-group">
@@ -1623,13 +1706,14 @@ export function DesignerStudioTab() {
         <div className="ds-split-host">{bodyEl}</div>
       </div>
 
-      {/* Layer / element context menu (DUI) */}
+      {/* Layer / element context menu (DUI) — triggered from layer panel or canvas right-click */}
       <ContextMenuView
         items={layerMenuItems}
-        anchorEl={menuAnchor}
-        open={!!menuAnchor}
+        anchorEl={canvasMenuPos ? null : menuAnchor}
+        open={!!menuAnchor || !!canvasMenuPos}
         onClose={closeMenu}
-        width="sm"
+        position={canvasMenuPos ?? undefined}
+        width={200}
         rounded
       />
 

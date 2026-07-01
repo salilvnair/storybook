@@ -118,6 +118,6 @@ export const ZoomOutIcon = (p: IconProps) => (<Svg {...p}><circle cx="11" cy="11
 export const ExpandIcon  = (p: IconProps) => (<Svg {...p}><path d="M3 8V5a2 2 0 0 1 2-2h3M21 8V5a2 2 0 0 1-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M21 16v3a2 2 0 0 1-2 2h-3" /></Svg>);
 export const AgentIcon    = (p: IconProps) => (<Svg {...p}><path d="M6 6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6z" /><path d="M12 2v2" /><path d="M9 12v9" /><path d="M15 12v9" /><path d="M5 16l4-2" /><path d="M15 14l4 2" /><path d="M9 18h6" /><path d="M10 8v.01" /><path d="M14 8v.01" /></Svg>);
 export const RotateCWIcon  = (p: IconProps) => (<Svg {...p}><path d="M21 2v6h-6" /><path d="M21 8a9 9 0 1 1-9-9" /></Svg>);
-export const FlipHIcon     = (p: IconProps) => (<Svg {...p}><path d="M12 3v18" /><path d="M8 7 4 12l4 5" /><path d="M16 7l4 5-4 5" /></Svg>);
-export const FlipVIcon     = (p: IconProps) => (<Svg {...p}><path d="M3 12h18" /><path d="M7 8l5-4 5 4" /><path d="M7 16l5 4 5-4" /></Svg>);
+export const FlipHIcon     = (p: IconProps) => (<Svg {...p}><path d="M3 12h18" /><path d="M7 8l5-4 5 4" /><path d="M7 16l5 4 5-4" /></Svg>);
+export const FlipVIcon     = (p: IconProps) => (<Svg {...p}><path d="M12 3v18" /><path d="M8 7 4 12l4 5" /><path d="M16 7l4 5-4 5" /></Svg>);
 export const ResetIcon     = (p: IconProps) => (<Svg {...p}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></Svg>);

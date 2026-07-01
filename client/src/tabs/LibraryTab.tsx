@@ -5,7 +5,7 @@
  * Toggle between "Latest" and "Archive" views.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ContextMenuView, type ContextMenuItem, ModalView, ButtonView, ChipView } from '@salilvnair/dui';
+import { ContextMenuView, type ContextMenuItem, ModalView, ButtonView, ChipView, SegmentedView } from '@salilvnair/dui';
 import { BookFlip } from '../components/book/BookFlip';
 import { PdfPageViewer } from '../components/book/PdfPageViewer';
 import {
@@ -191,18 +191,17 @@ export function LibraryTab() {
           <h2 className="lib-tab-h2">Library</h2>
         </div>
         <div className="lib-tab-actions">
-          {/* Archive / Latest toggle */}
-          <div className="lib-view-toggle">
-            <button
-              className={`lib-vt-btn${viewMode === 'latest' ? ' is-active' : ''}`}
-              onClick={() => setViewMode('latest')}
-            >Latest</button>
-            <button
-              className={`lib-vt-btn${viewMode === 'archive' ? ' is-active' : ''}`}
-              onClick={() => setViewMode('archive')}
-            >Archive</button>
-          </div>
-          <ButtonView size="sm" variant="secondary" iconLeft={<RefreshIcon size={12} />} onClick={refresh} style={{ height: 32 }}>Refresh</ButtonView>
+          <SegmentedView
+            size="sm"
+            accentColor="var(--story-accent-3)"
+            options={[
+              { id: 'latest',  label: 'Latest' },
+              { id: 'archive', label: 'Archive' },
+            ]}
+            value={viewMode}
+            onChange={(id) => setViewMode(id as ViewMode)}
+          />
+          <ButtonView size="sm" variant="secondary" iconLeft={<RefreshIcon size={12} />} onClick={refresh}>Refresh</ButtonView>
         </div>
       </div>
       <p className="lib-tab-lead">
@@ -346,16 +345,16 @@ export function LibraryTab() {
         headerColor="var(--story-accent-3)"
         headerGradient
         footerLeft={
-          <div className="lib-view-toggle">
-            <button
-              className={`lib-vt-btn${!realPreview ? ' is-active' : ''}`}
-              onClick={() => setRealPreview(false)}
-            >Standard</button>
-            <button
-              className={`lib-vt-btn${realPreview ? ' is-active' : ''}`}
-              onClick={() => setRealPreview(true)}
-            >Real Preview</button>
-          </div>
+          <SegmentedView
+            size="sm"
+            accentColor="var(--story-accent-3)"
+            options={[
+              { id: 'standard', label: 'Standard' },
+              { id: 'real',     label: 'Real Preview' },
+            ]}
+            value={realPreview ? 'real' : 'standard'}
+            onChange={(id) => setRealPreview(id === 'real')}
+          />
         }
         footerRight={reading && (
           <ButtonView size="md" accentColor="var(--story-accent)" iconLeft={<DownloadIcon size={14} />} onClick={() => downloadPdf(reading.id, reading.title)}>

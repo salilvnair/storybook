@@ -42,7 +42,7 @@ export function useAIEdit(imageSrc: string, opts: UseAIEditOpts) {
   }, []);
 
   const [dim,         setDim]         = useState({ w: stageW, h: stageH });
-  const [aiZoom,      setAiZoom]      = useState(1);
+  const [aiZoom,      setAiZoom]      = useState(0.9);
   const [brush,       setBrush]       = useState(32);
   const [brushMode,   setBrushMode]   = useState<BrushMode>('paint');
   const [instruction, setInstruction] = useState('');
@@ -224,8 +224,7 @@ export function useAIEdit(imageSrc: string, opts: UseAIEditOpts) {
     clearMask();
   };
 
-  const padH = Math.max(0, (dim.h * (aiZoom - 1)) / 2);
-  const padW = Math.max(0, (dim.w * (aiZoom - 1)) / 2);
+  // No transform-scale padding needed — canvas container uses actual scaled DOM dimensions.
 
   // ── Palette section data ─────────────────────────────────────────────────────
   // Each section mirrors the Manual palette's set-group-btn + set-nav structure.
@@ -389,19 +388,23 @@ export function useAIEdit(imageSrc: string, opts: UseAIEditOpts) {
     </aside>
   );
 
-  // ── CENTER panel ─────────────────────────────────────────────────────────────
-  const centerPanel = (
-    <div className="ds-canvas-wrap">
-      {/* Photoshop-style icon toolbar */}
-      <div className="aie-top-toolbar">
+  // ── TOOLBAR slot — renders in the main designer toolbar row when dsMode='ai' ──
+  const toolbarSlot = (
+    <>
+      <div className="ds-toolbar-sep" />
+      <div className="ds-toolbar-group">
         <button type="button" className={`aie-tbar-btn${brushMode === 'paint' ? ' is-active' : ''}`} title="Paint" onClick={() => setBrushMode('paint')}><PencilIcon size={15} /></button>
         <button type="button" className={`aie-tbar-btn${brushMode === 'protect' ? ' is-protect' : ''}`} title="Protect" onClick={() => setBrushMode('protect')}><LockIcon size={15} /></button>
         <button type="button" className={`aie-tbar-btn${brushMode === 'erase' ? ' is-erase' : ''}`} title="Erase" onClick={() => setBrushMode('erase')}><EraserIcon size={15} /></button>
-        <div className="aie-tbar-div" />
+      </div>
+      <div className="ds-toolbar-sep" />
+      <div className="ds-toolbar-group">
         <button type="button" className="aie-tbar-btn" title="Whole image" onClick={selectAll}><ExpandIcon size={15} /></button>
         <button type="button" className="aie-tbar-btn" title="Auto-protect rest" onClick={autoProtectRest} disabled={!hasMask}><ShieldIcon size={15} /></button>
         <button type="button" className="aie-tbar-btn" title="Clear all" onClick={clearMask} disabled={!hasMask && !hasProtect}><TrashIcon size={15} /></button>
-        <div className="aie-tbar-div" />
+      </div>
+      <div className="ds-toolbar-sep" />
+      <div className="ds-toolbar-group">
         <button type="button" className="aie-tbar-btn" title={`Undo${undoStack.length ? ` (${undoStack.length})` : ''}`} onClick={undo} disabled={!undoStack.length || busy}><UndoIcon size={15} /></button>
         <button
           type="button"
@@ -413,22 +416,26 @@ export function useAIEdit(imageSrc: string, opts: UseAIEditOpts) {
           onPointerLeave={() => setComparing(false)}
         ><EyeIcon size={15} /></button>
       </div>
+    </>
+  );
+
+  // ── CENTER panel ─────────────────────────────────────────────────────────────
+  const centerPanel = (
+    <div className="ds-canvas-wrap">
       <div className="ds-canvas-scroll">
-        <div style={{ paddingTop: padH, paddingBottom: padH, paddingLeft: padW, paddingRight: padW }}>
-          <div style={{ width: dim.w, height: dim.h, position: 'relative', transform: `scale(${aiZoom})`, transformOrigin: 'center center', borderRadius: 10, overflow: 'hidden' }}>
-            <canvas ref={setImgCanvas} className="aie-cv" style={{ visibility: comparing ? 'hidden' : 'visible' }} />
-            <canvas ref={(n) => { origRef.current = n; }} className="aie-cv aie-orig" style={{ visibility: comparing ? 'visible' : 'hidden' }} />
-            {comparing && <div className="aie-compare-badge">Original</div>}
-            <canvas ref={(n) => { protectRef.current = n; }} className="aie-cv aie-protect" />
-            <canvas
-              ref={(n) => { maskRef.current = n; }}
-              className={`aie-cv aie-mask${brushMode === 'protect' ? ' is-protect' : brushMode === 'erase' ? ' is-erase' : ''}`}
-              style={{ visibility: comparing ? 'hidden' : 'visible' }}
-              onPointerDown={(e) => { drawing.current = true; (e.target as HTMLElement).setPointerCapture(e.pointerId); const p = evtXY(e); paintAt(p.x, p.y); }}
-              onPointerMove={(e) => { if (drawing.current) { const p = evtXY(e); paintAt(p.x, p.y); } }}
-              onPointerUp={() => { drawing.current = false; }}
-            />
-          </div>
+        <div style={{ width: Math.round(dim.w * aiZoom), height: Math.round(dim.h * aiZoom), position: 'relative', borderRadius: 10, overflow: 'hidden' }}>
+          <canvas ref={setImgCanvas} className="aie-cv" style={{ visibility: comparing ? 'hidden' : 'visible' }} />
+          <canvas ref={(n) => { origRef.current = n; }} className="aie-cv aie-orig" style={{ visibility: comparing ? 'visible' : 'hidden' }} />
+          {comparing && <div className="aie-compare-badge">Original</div>}
+          <canvas ref={(n) => { protectRef.current = n; }} className="aie-cv aie-protect" />
+          <canvas
+            ref={(n) => { maskRef.current = n; }}
+            className={`aie-cv aie-mask${brushMode === 'protect' ? ' is-protect' : brushMode === 'erase' ? ' is-erase' : ''}`}
+            style={{ visibility: comparing ? 'hidden' : 'visible' }}
+            onPointerDown={(e) => { drawing.current = true; (e.target as HTMLElement).setPointerCapture(e.pointerId); const p = evtXY(e); paintAt(p.x, p.y); }}
+            onPointerMove={(e) => { if (drawing.current) { const p = evtXY(e); paintAt(p.x, p.y); } }}
+            onPointerUp={() => { drawing.current = false; }}
+          />
         </div>
       </div>
       {/* Zoom bar — same structure and classes as Manual mode */}
@@ -520,5 +527,5 @@ export function useAIEdit(imageSrc: string, opts: UseAIEditOpts) {
     </aside>
   );
 
-  return { leftPanel, centerPanel, rightPanel, isWholeImage, engineLabel: engineMeta?.label ?? null };
+  return { leftPanel, centerPanel, rightPanel, toolbarSlot, isWholeImage, engineLabel: engineMeta?.label ?? null };
 }
