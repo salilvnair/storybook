@@ -8,8 +8,6 @@ import { useStoryStore } from '../store/story-store';
 import { useTemplatesStore } from '../store/templates-store';
 import { TemplateSchematic } from './template/TemplateSchematic';
 import { LiveBookFlip } from './book/LiveBookFlip';
-import { LivePageFlipBook } from './book/LivePageFlipBook';
-import { usePrefsStore } from '../store/prefs-store';
 
 function dataUri(b64: string) {
   return b64 ? `data:image/png;base64,${b64}` : '';
@@ -17,7 +15,6 @@ function dataUri(b64: string) {
 
 export function StorybookCanvas() {
   const { story, phase, progress, cover, pages, warns, error, pdfBase64, pdfFilename, reset, regenerating, regeneratePage, regeneratingCover, regenerateCover } = useStoryStore();
-  const readerMode = usePrefsStore((s) => s.prefs.readerMode);
   const defaultSpec = useTemplatesStore((s) => s.defaultSpec());
   const savedCount = useTemplatesStore((s) => s.saved.length);
   const canReroll = (phase === 'done' || phase === 'error') && regenerating === null && !regeneratingCover;
@@ -84,7 +81,7 @@ export function StorybookCanvas() {
         )}
 
         {/* Live book-flip — replaces the old card grid */}
-        {showBook && (readerMode === 'pageflip' && phase === 'done' ? <LivePageFlipBook /> : <LiveBookFlip />)}
+        {showBook && <LiveBookFlip />}
 
 
         {/* Warnings */}

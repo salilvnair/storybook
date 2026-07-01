@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import { SelectInputView, TextInputView, ChipView, type SelectOption } from '@salilvnair/dui';
 import { useMusicEngineStore } from '../../store/music-engine-store';
 import { SaveButton } from '../SaveButton';
+import { SettingsPanelHeader } from './SettingsPanelHeader';
 
 export function MusicEngineSettings() {
   const { engines, config, loaded, init, setEngine, setUrl, setOption, save, current } = useMusicEngineStore();
@@ -19,12 +20,8 @@ export function MusicEngineSettings() {
 
   return (
     <div className="story-tab-scroll">
-    <div className="bs-settings-pane bs-custom-provider-pane ie-pane" style={{ padding: '0 4px' }}>
-      <div className="bs-settings-section-head">
-        <span style={{ fontSize: 15 }}>🎵</span>
-        <h3 className="bs-settings-h3">Music Engine</h3>
-        {eng && <ChipView size="sm" color={eng.accent} label={eng.label} />}
-      </div>
+    <div className="bs-settings-pane ie-pane" style={{ padding: '0 4px' }}>
+      <SettingsPanelHeader icon="🎵" title="Music Engine" subtitle="Connect a background music generation service for atmosphere." action={eng && <ChipView size="sm" color={eng.accent} label={eng.label} />} />
 
       <label className="bs-custom-provider-label bs-span2 ie-field" style={{ maxWidth: 420 }}>
         Engine

@@ -9,10 +9,12 @@ import {
   type SelectOption,
 } from '@salilvnair/dui';
 import { useCharactersStore, type Character, type CharacterRole } from '../../store/characters-store';
+import { useCharacterDraftStore } from '../../store/character-draft-store';
 import { useVoicesStore } from '../../store/voices-store';
 import { useAudioEngineStore } from '../../store/audio-engine-store';
 import { UserIcon, UsersIcon, PlusIcon, TrashIcon, LockIcon, SaveIcon, CameraIcon, MicIcon } from '../../icons';
 import { PhotoHeroModal } from './PhotoHeroModal';
+import { SettingsPanelHeader } from './SettingsPanelHeader';
 
 const ROLE_META: Record<CharacterRole, { label: string; color: string }> = {
   hero:     { label: 'Hero',     color: '#34d399' },
@@ -104,11 +106,6 @@ function TraitEditor({ traits, onChange }: TraitEditorProps) {
   );
 }
 
-const BLANK: Omit<Character, 'id' | 'createdAt' | 'updatedAt'> = {
-  name: '', role: 'hero', species: 'human', age: 'young child (4–6)',
-  lookDescription: '', traits: [], lockedSeed: null, referenceImage: null, voiceId: null,
-};
-
 const EMPTY_VOICES: string[] = [];
 
 function CharacterForm() {
@@ -117,31 +114,20 @@ function CharacterForm() {
   // Derive directly from snapshot (not s.current() which calls get() internally)
   const engineVoices = useAudioEngineStore((s) => s.engines.find((e) => e.id === s.config.engine)?.voices ?? EMPTY_VOICES);
   const char = characters.find((c) => c.id === editingId) ?? null;
-  const [draft, setDraft] = useState<typeof BLANK>(BLANK);
-  const [dirty, setDirty] = useState(false);
+  // Draft lives in a shared store so the "describe to AI" chat can populate it too.
+  const draft = useCharacterDraftStore((s) => s.draft);
+  const dirty = useCharacterDraftStore((s) => s.dirty);
+  const set = useCharacterDraftStore((s) => s.setField);
+  const loadFrom = useCharacterDraftStore((s) => s.loadFrom);
+  const clearDirty = useCharacterDraftStore((s) => s.clearDirty);
   const [photoModal, setPhotoModal] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (!voicesLoaded) void loadVoices(); }, [voicesLoaded, loadVoices]);
 
   useEffect(() => {
-    if (char) {
-      setDraft({
-        name: char.name, role: char.role, species: char.species, age: char.age,
-        lookDescription: char.lookDescription, traits: char.traits,
-        lockedSeed: char.lockedSeed, referenceImage: char.referenceImage, voiceId: char.voiceId,
-      });
-      setDirty(false);
-    } else {
-      setDraft(BLANK);
-      setDirty(false);
-    }
+    loadFrom(char);
   }, [editingId, char?.updatedAt]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const set = <K extends keyof typeof BLANK>(k: K, v: (typeof BLANK)[K]) => {
-    setDraft((d) => ({ ...d, [k]: v }));
-    setDirty(true);
-  };
 
   const handleSave = async () => {
     if (!draft.name.trim()) return;
@@ -150,13 +136,12 @@ function CharacterForm() {
     } else {
       await add(draft);
     }
-    setDirty(false);
+    clearDirty();
   };
 
   const handleNew = () => {
     setEditing(null);
-    setDraft(BLANK);
-    setDirty(false);
+    loadFrom(null);
   };
 
   const handleDelete = async () => {
@@ -388,7 +373,6 @@ function CharacterForm() {
         characterName={char?.name || draft.name || undefined}
         onSelect={(image_b64) => {
           set('referenceImage', `data:image/png;base64,${image_b64}`);
-          setDirty(true);
         }}
       />
     </div>
@@ -453,7 +437,11 @@ function CharacterList() {
   );
 }
 
-export function CharacterStudio() {
+/**
+ * The Character Studio body (list + form) — reused by the top-nav Character
+ * Studio tab (right pane). `header` toggles the settings-style heading.
+ */
+export function CharacterStudioContent({ header = true }: { header?: boolean }) {
   const load = useCharactersStore((s) => s.load);
 
   useEffect(() => { void load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -461,15 +449,9 @@ export function CharacterStudio() {
   return (
     <div className="story-tab-scroll">
       <div className="prov-page">
-        <div className="prov-section-head">
-          <span style={{ fontSize: 15 }}>🧬</span>
-          <h2 className="story-settings-h2" style={{ margin: 0 }}>Character Studio</h2>
-        </div>
-        <p className="story-settings-lead">
-          Build a cast of reusable characters. Each character's <b>look description</b> is automatically
-          injected into every scene prompt — so the same hero appears on every page, consistently.
-          Assign characters to a story using the <b>Cast</b> picker before generating.
-        </p>
+        {header && (
+          <SettingsPanelHeader icon="🧬" title="Character Studio" subtitle="Build reusable characters whose look is injected into every scene — consistent across all pages." />
+        )}
 
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
           <div style={{ width: 210, flexShrink: 0 }}>
@@ -482,4 +464,9 @@ export function CharacterStudio() {
       </div>
     </div>
   );
+}
+
+/** Settings panel wrapper (kept for any legacy reference). */
+export function CharacterStudio() {
+  return <CharacterStudioContent />;
 }

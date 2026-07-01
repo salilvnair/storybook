@@ -2,10 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { TabBar } from './components/TabBar';
 import { StoryTab } from './tabs/StoryTab';
 import { TemplatesTab } from './tabs/TemplatesTab';
+import { CharacterStudioTab } from './tabs/CharacterStudioTab';
+import { DesignerStudioTab } from './tabs/DesignerStudioTab';
 import { LibraryTab } from './tabs/LibraryTab';
 import { SamplePreviewTab } from './tabs/SamplePreviewTab';
 import { SettingsPage } from './tabs/SettingsPage';
-import { ButtonView, IconButtonView, InfoPopupView } from '@salilvnair/dui';
+import { ButtonView, IconButtonView } from '@salilvnair/dui';
+import { EngineStatusPopup } from './components/EngineStatusPopup';
 import { useTabsStore } from './store/tabs-store';
 import { useSettingsStore } from './store/settings-store';
 import { usePromptsStore } from './store/prompts-store';
@@ -20,7 +23,7 @@ import { useMusicEngineStore } from './store/music-engine-store';
 import { useWorldsStore } from './store/worlds-store';
 import { usePageDesignStore } from './store/page-design-store';
 import { usePacksStore } from './store/packs-store';
-import { PaletteIcon, BookIcon, SettingsIcon } from './icons';
+import { PaletteIcon, BookIcon, SettingsIcon, UsersIcon } from './icons';
 import { BrandLogo } from './components/BrandLogo';
 
 export default function App() {
@@ -49,11 +52,16 @@ export default function App() {
     void loadTemplates();
     void loadProviders();
     void useImageEngineStore.getState().init();
+    void useAudioEngineStore.getState().init();
     void useMusicEngineStore.getState().init();
     void useWorldsStore.getState().load();
     void useThemesStore.getState().load();
     void usePalettesStore.getState().load();
-    const id = setInterval(() => { void fetchServerConfig(); void useImageEngineStore.getState().checkHealth(); }, 15000);
+    const id = setInterval(() => {
+      void fetchServerConfig();
+      void useImageEngineStore.getState().checkHealth();
+      void useAudioEngineStore.getState().checkHealth();
+    }, 15000);
     void usePromptsStore.getState().load();
     void useCharactersStore.getState().load();
     void usePageDesignStore.getState().load();
@@ -87,6 +95,8 @@ export default function App() {
         </div>
         <div className="story-hero-actions">
           <ButtonView size="sm" variant="secondary" iconLeft={<PaletteIcon size={14} />} onClick={() => open('templates')}>Templates</ButtonView>
+          <ButtonView size="sm" variant="secondary" iconLeft={<UsersIcon size={14} />} onClick={() => open('character-studio')}>Character Studio</ButtonView>
+          <ButtonView size="sm" variant="secondary" iconLeft={<PaletteIcon size={14} />} onClick={() => open('designer')}>Designer</ButtonView>
           <ButtonView size="sm" variant="secondary" iconLeft={<BookIcon size={14} />} onClick={() => open('library')}>Library</ButtonView>
           {/* Provider · Model — plain label */}
           <span className="story-status-pill is-plain" title="Active LLM provider · model">
@@ -104,38 +114,20 @@ export default function App() {
             <span className={`story-status-dot ${allOk ? 'ok' : anyOk ? 'warn' : 'bad'}`} />
             AI Engine
           </button>
-          <InfoPopupView
+          <EngineStatusPopup
             open={enginePopupOpen}
             onClose={() => setEnginePopupOpen(false)}
             anchorEl={engineChipRef.current}
-            title="AI Engine Status"
-            width={300}
-            items={[
-              {
-                code: 'chat-engine',
-                description: llmOk
-                  ? `🟢 ${activeProvider?.name || serverConfig?.llmModel || 'server .env'}`
-                  : '🔴 Not configured',
-              },
-              {
-                code: 'image-engine',
-                description: imgHealth.ok
-                  ? `🟢 ${imgEngine?.label || 'Image engine'} · ready`
-                  : imgHealth.configured ? '🟡 URL set · unreachable' : '🔴 Not configured',
-              },
-              {
-                code: 'voice-engine',
-                description: audioOk
-                  ? `🟢 ${audioEngine?.label || 'TTS'} · ${audioConfig.url}`
-                  : '🔴 Not configured',
-              },
-              {
-                code: 'music-engine',
-                description: musicOk
-                  ? `🟢 ${musicEngine?.label || 'Music'} · ${musicConfig.url}`
-                  : '🔴 Not configured',
-              },
-            ]}
+            llmOk={llmOk}
+            llmDetail={activeProvider?.name || serverConfig?.llmModel || 'server .env'}
+            imgOk={imgHealth.ok}
+            imgWarn={!!imgHealth.configured && !imgHealth.ok}
+            imgDetail={imgEngine?.label || 'Image engine'}
+            audioOk={audioOk}
+            audioDetail={`${audioEngine?.label || 'TTS'} · ${audioConfig.url}`}
+            musicOk={musicOk}
+            musicDetail={`${musicEngine?.label || 'Music'} · ${musicConfig.url}`}
+            onOpenSettings={() => open('settings')}
           />
           <IconButtonView size="md" tooltip="Settings" icon={<SettingsIcon size={15} />} onClick={() => open('settings')} />
         </div>
@@ -157,6 +149,8 @@ export default function App() {
           return (
             <div key={tab.id} className="story-tab-pane">
               {tab.type === 'templates' && <TemplatesTab />}
+              {tab.type === 'character-studio' && <CharacterStudioTab />}
+              {tab.type === 'designer' && <DesignerStudioTab />}
               {tab.type === 'library' && <LibraryTab />}
               {tab.type === 'sample-preview' && <SamplePreviewTab />}
               {tab.type === 'settings' && <SettingsPage />}

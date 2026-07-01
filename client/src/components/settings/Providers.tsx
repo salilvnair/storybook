@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { useProvidersStore } from '../../store/providers-store';
 import { useSettingsStore } from '../../store/settings-store';
 import { StyledSelect } from './StyledSelect';
+import { SettingsPanelHeader } from './SettingsPanelHeader';
 import {
   LlmIcon, OpenAiProviderIcon, AnthropicProviderIcon, LmStudioProviderIcon, OllamaProviderIcon,
   DeepSeekProviderIcon, GrokProviderIcon, MistralProviderIcon, GeminiProviderIcon, QwenProviderIcon,
@@ -93,6 +94,7 @@ export function Providers() {
   return (
     <div className="story-tab-scroll">
       <div className="bs-settings-pane">
+        <SettingsPanelHeader icon="💬" title="Chat Engine" subtitle="Configure your LLM provider — OpenAI, Anthropic, DeepSeek, and more." />
         {/* ── LLM Provider Configuration (LlmPanel) ── */}
         <div className="bs-llm-config">
           <div className="bs-settings-section-head"><LlmIcon className="bs-ico-sm" /><h3 className="bs-settings-h3">LLM Provider Configuration</h3></div>

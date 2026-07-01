@@ -88,6 +88,30 @@ export const PROMPT_DEFS: PromptDef[] = [
     ],
   },
   {
+    key: 'characterDesigner',
+    label: 'Character Designer',
+    category: 'Character',
+    description: 'Powers the Character Studio "describe to AI" chat — turns a freeform description into a character spec (name, role, species, age, look, traits). {{description}} is the user\'s text.',
+    color: '#34d399',
+    variables: ['{{description}}'],
+    parts: [
+      { id: 'system', label: 'System', icon: '⚙', overrideKey: 'characterDesignSystem', default: '' },
+      { id: 'user', label: 'User', icon: '💬', overrideKey: 'characterDesignUser', default: 'Character description:\n{{description}}\n\nReturn the JSON character spec.' },
+    ],
+  },
+  {
+    key: 'imageEditor',
+    label: 'Image Editor',
+    category: 'Illustration',
+    description: 'Powers the AI Edit panel — turns a chat edit instruction into a tight inpaint prompt for the masked region. {{instruction}} = your edit, {{currentPrompt}} = the page\'s current image description.',
+    color: '#ec4899',
+    variables: ['{{instruction}}', '{{currentPrompt}}'],
+    parts: [
+      { id: 'system', label: 'System', icon: '⚙', overrideKey: 'imageEditorPrompt', default: '' },
+      { id: 'user', label: 'User', icon: '💬', overrideKey: 'imageEditorPromptNotes', default: '' },
+    ],
+  },
+  {
     key: 'photoHeroPrompt',
     label: 'Photo → Hero Portrait',
     category: 'Character',

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { audit } from '../db/sqldb';
+import { audit, kvSet } from '../db/sqldb';
 
 export interface AudioEngineMeta {
   id: string;
@@ -57,6 +57,7 @@ interface AudioEngineState {
 
 function persist(cfg: AudioConfig) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); } catch { /* */ }
+  void kvSet('audio.config', JSON.stringify(cfg)); // mirror to sql.js → DB Explorer › kv
   void pushServer(cfg);
 }
 
@@ -96,6 +97,6 @@ export const useAudioEngineStore = create<AudioEngineState>((set, get) => ({
   setEngine: (id) => { const config = { ...get().config, engine: id }; set({ config }); persist(config); void audit('engine.change', `Audio engine → ${id}`, { engine: id }); },
   setUrl: (url) => { const config = { ...get().config, url }; set({ config }); persist(config); },
   setOption: (k, v) => { const config = { ...get().config, options: { ...get().config.options, [k]: v } }; set({ config }); persist(config); },
-  save: async () => { await pushServer(get().config); await get().checkHealth(); },
+  save: async () => { persist(get().config); await pushServer(get().config); await get().checkHealth(); },
   current: () => get().engines.find((e) => e.id === get().config.engine),
 }));

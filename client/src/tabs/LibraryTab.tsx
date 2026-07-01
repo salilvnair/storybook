@@ -4,12 +4,10 @@
  * for open, download (with format picker), archive, and delete.
  * Toggle between "Latest" and "Archive" views.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ContextMenuView, type ContextMenuItem, ModalView, ButtonView, ChipView } from '@salilvnair/dui';
 import { BookFlip } from '../components/book/BookFlip';
-import { PageFlipBook } from '../components/book/PageFlipBook';
 import { PdfPageViewer } from '../components/book/PdfPageViewer';
-import { usePrefsStore } from '../store/prefs-store';
 import {
   BookIcon, TrashIcon, DownloadIcon, RefreshIcon, MoreVertIcon,
   ArchiveIcon, UnarchiveIcon, PrintIcon,
@@ -39,11 +37,12 @@ export function LibraryTab() {
   const [viewMode, setViewMode] = useState<ViewMode>('latest');
   const [reading, setReading] = useState<StoryMeta | null>(null);
   const [realPreview, setRealPreview] = useState(false);
+  const [spineColor, setSpineColor] = useState<string>('');
+  const spineImgRef = useRef<HTMLImageElement | null>(null);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const [printTarget, setPrintTarget] = useState<StoryMeta | null>(null);
   const [printOpts, setPrintOpts] = useState<PrintOptions>({ format: 'default', layout: 'spread' });
   const [printing, setPrinting] = useState(false);
-  const readerMode = usePrefsStore((s) => s.prefs.readerMode);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -55,6 +54,43 @@ export function LibraryTab() {
   useEffect(() => { refresh(); }, [refresh]);
 
   const visible = stories.filter((s) => viewMode === 'archive' ? !!s.archived : !s.archived);
+
+  // Extract dominant color from cover art to use as the book spine color
+  useEffect(() => {
+    if (!reading) { setSpineColor(''); return; }
+    const img = new Image();
+    spineImgRef.current = img;
+    img.src = `/api/stories/${reading.id}/cover`;
+    img.onload = () => {
+      if (spineImgRef.current !== img) return;
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 40; canvas.height = 40;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, 40, 40);
+        const d = ctx.getImageData(0, 0, 40, 40).data;
+        let r = 0, g = 0, b = 0, w = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          const rv = d[i], gv = d[i + 1], bv = d[i + 2];
+          const bri = (rv + gv + bv) / 3;
+          if (bri < 18 || bri > 238) continue; // skip near-black and near-white
+          const max = Math.max(rv, gv, bv);
+          const sat = max > 0 ? (max - Math.min(rv, gv, bv)) / max : 0;
+          const wt = sat * sat + 0.08; // weight by saturation² so vivid beats grey
+          r += rv * wt; g += gv * wt; b += bv * wt; w += wt;
+        }
+        if (w > 0) {
+          const avgR = r / w, avgG = g / w, avgB = b / w;
+          // Normalise brightness to ~88 so dark & light covers both produce a rich spine
+          const bri = (avgR + avgG + avgB) / 3;
+          const f = bri > 5 ? 88 / bri : 1;
+          setSpineColor(`rgb(${Math.min(255, Math.round(avgR * f))},${Math.min(255, Math.round(avgG * f))},${Math.min(255, Math.round(avgB * f))})`);
+        }
+      } catch { /* canvas tainted — fall back to default */ }
+    };
+    return () => { spineImgRef.current = null; };
+  }, [reading?.id]);
 
   const openReader = (s: StoryMeta) => { setReading(s); setRealPreview(false); setMenu(null); };
 
@@ -328,11 +364,12 @@ export function LibraryTab() {
         )}
       >
         {reading && (
-          realPreview
-            ? <PdfPageViewer key={`pdf-${reading.id}`} pdfUrl={`/api/stories/${reading.id}/pdf`} />
-            : readerMode === 'pageflip'
-              ? <PageFlipBook storyId={reading.id} pageCount={reading.pageCount} title={reading.title} />
-              : <BookFlip storyId={reading.id} pageCount={reading.pageCount} title={reading.title} />
+          <div style={spineColor ? { '--spine-col': spineColor } as React.CSSProperties : undefined}>
+            {realPreview
+              ? <PdfPageViewer key={`pdf-${reading.id}`} storyId={reading.id} pageCount={reading.pageCount} title={reading.title} />
+              : <BookFlip key={`book-${reading.id}`} storyId={reading.id} pageCount={reading.pageCount} title={reading.title} />
+            }
+          </div>
         )}
       </ModalView>
     </div>

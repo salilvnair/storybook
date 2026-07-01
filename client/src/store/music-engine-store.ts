@@ -3,6 +3,7 @@
  * Manages the music engine config (URL, options) and tracks health.
  */
 import { create } from 'zustand';
+import { kvSet } from '../db/sqldb';
 
 export interface MusicEngineMeta {
   id: string;
@@ -54,12 +55,13 @@ export const useMusicEngineStore = create<MusicEngineState>((set, get) => ({
     } catch { set({ loaded: true }); }
   },
 
-  setEngine: (id) => set((s) => ({ config: { ...s.config, engine: id } })),
-  setUrl: (url) => set((s) => ({ config: { ...s.config, url } })),
-  setOption: (k, v) => set((s) => ({ config: { ...s.config, options: { ...s.config.options, [k]: v } } })),
+  setEngine: (id) => { const config = { ...get().config, engine: id }; set({ config }); void kvSet('music.config', JSON.stringify(config)); },
+  setUrl: (url) => { const config = { ...get().config, url }; set({ config }); void kvSet('music.config', JSON.stringify(config)); },
+  setOption: (k, v) => { const config = { ...get().config, options: { ...get().config.options, [k]: v } }; set({ config }); void kvSet('music.config', JSON.stringify(config)); },
 
   save: async () => {
     const { config } = get();
+    void kvSet('music.config', JSON.stringify(config)); // mirror to sql.js → DB Explorer › kv
     await fetch('/api/music-config', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config),
     });

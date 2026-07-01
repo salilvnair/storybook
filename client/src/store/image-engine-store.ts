@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { audit } from '../db/sqldb';
+import { audit, kvSet } from '../db/sqldb';
 
 /**
  * Image-engine configuration on the client. The user picks an engine
@@ -12,9 +12,12 @@ export interface EngineMeta {
   label: string;
   blurb: string;
   accent: string;
+  model: string;
   options: { magic: boolean; preset: boolean; negativePrompt: boolean; steps: boolean; model?: boolean };
   presets: string[];
   models: string[];
+  direct?: boolean;
+  noUrl?: boolean;
 }
 
 export interface ImageConfig {
@@ -62,6 +65,7 @@ interface ImageEngineState {
 
 function persist(cfg: ImageConfig) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg)); } catch { /* */ }
+  void kvSet('image.config', JSON.stringify(cfg)); // mirror to sql.js → DB Explorer › kv
   void pushServer(cfg);
 }
 
@@ -103,6 +107,6 @@ export const useImageEngineStore = create<ImageEngineState>((set, get) => ({
   setEngine: (id) => { const config = { ...get().config, engine: id }; set({ config }); persist(config); void audit('engine.change', `Image engine → ${id}`, { engine: id }); },
   setUrl: (engineId, url) => { const config = { ...get().config, urls: { ...get().config.urls, [engineId]: url } }; set({ config }); persist(config); },
   setOption: (k, v) => { const config = { ...get().config, options: { ...get().config.options, [k]: v } }; set({ config }); persist(config); },
-  save: async () => { await pushServer(get().config); await get().checkHealth(); },
+  save: async () => { persist(get().config); await pushServer(get().config); await get().checkHealth(); },
   current: () => get().engines.find((e) => e.id === get().config.engine),
 }));

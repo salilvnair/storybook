@@ -36,7 +36,7 @@ export function TemplatesTab() {
     landingChips: mode === 'pdf'
       ? [{ chipText: '📄 Attach a picture-book PDF', chatText: 'Import a PDF and copy its layout' }]
       : [{ chipText: '🧩 Open the layout editor', chatText: 'Open the layout editor' }, { chipText: '🌙 A calm bedtime layout', chatText: 'I want a calm bedtime template, soft pastel pages' }],
-    stream: { enabled: false },
+    stream: { enabled: true, transport: 'sse' as const },
     renderers: TEMPLATE_RENDERERS,
   }), [mode]);
 

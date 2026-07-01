@@ -9,6 +9,7 @@ import { usePalettesStore } from '../../store/palettes-store';
 import { useThemesStore } from '../../store/themes-store';
 import { useImageEngineStore } from '../../store/image-engine-store';
 import { BookIcon, CpuIcon, PaletteIcon, SparkleIcon, TrashIcon } from '../../icons';
+import { SettingsPanelHeader } from './SettingsPanelHeader';
 
 const LOG_LIMIT_OPTIONS: SelectOption[] = [
   { value: '1000', label: '1,000 entries' },
@@ -47,8 +48,7 @@ export function GeneralPanel() {
   return (
     <div className="story-tab-scroll">
       <div className="prov-page gen-page">
-        <div className="prov-section-head"><span style={{ fontSize: 15 }}>📖</span><h2 className="story-settings-h2" style={{ margin: 0 }}>General</h2></div>
-        <p className="story-settings-lead">Your iStorybook workspace at a glance.</p>
+        <SettingsPanelHeader icon="📖" title="General" subtitle="Your iStorybook workspace at a glance." />
 
         {/* Live stat cards */}
         <div className="gen-stats">
@@ -114,7 +114,7 @@ export function ThemePanel() {
   return (
     <div className="story-tab-scroll">
       <div className="prov-page">
-        <div className="prov-section-head"><span style={{ fontSize: 15 }}>🎨</span><h2 className="story-settings-h2" style={{ margin: 0 }}>Theme</h2></div>
+        <SettingsPanelHeader icon="🎨" title="Theme" subtitle="Customize the look and feel of iStorybook." />
         <p className="story-settings-lead">Accent themes apply across the app instantly. Click to apply, right-click to edit colours, or add your own.</p>
         <ThemeCards />
       </div>
@@ -134,7 +134,7 @@ export function AiFeaturesPanel() {
   return (
     <div className="story-tab-scroll">
       <div className="prov-page">
-        <div className="prov-section-head"><span style={{ fontSize: 15 }}>✨</span><h2 className="story-settings-h2" style={{ margin: 0 }}>AI Features</h2></div>
+        <SettingsPanelHeader icon="✨" title="AI Features" subtitle="Enable or disable AI-powered generation features." />
         <div className="feat-list">
           {FEATURES.map((f) => (
             <div key={f.key} className="feat-row">

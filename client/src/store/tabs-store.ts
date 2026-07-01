@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { kvSet } from '../db/sqldb';
 
-export type TabType = 'story' | 'templates' | 'library' | 'sample-preview' | 'settings';
+export type TabType = 'story' | 'templates' | 'character-studio' | 'designer' | 'library' | 'sample-preview' | 'settings';
 
 export interface Tab {
   id: string;
@@ -11,11 +11,13 @@ export interface Tab {
 }
 
 // Singleton tabs re-focus instead of duplicating.
-const SINGLETON: TabType[] = ['templates', 'library', 'sample-preview', 'settings'];
+const SINGLETON: TabType[] = ['templates', 'character-studio', 'designer', 'library', 'sample-preview', 'settings'];
 
 const META: Record<TabType, { title: string; closable: boolean }> = {
   'story': { title: 'My Story', closable: true },
   'templates': { title: 'Templates', closable: true },
+  'character-studio': { title: 'Character Studio', closable: true },
+  'designer': { title: 'Designer', closable: true },
   'library': { title: 'Library', closable: true },
   'sample-preview': { title: 'Sample', closable: true },
   'settings': { title: 'Settings', closable: true },

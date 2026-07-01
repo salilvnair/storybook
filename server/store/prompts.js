@@ -9,6 +9,10 @@ const KEYS = [
   'characterClause', 'characterClauseNotes',
   'photoHeroPrompt', 'photoHeroPromptNotes',
   'artDirectorPrompt', 'artDirectorPromptNotes',
+  // Character Studio — "describe to AI"
+  'characterDesignSystem', 'characterDesignUser',
+  // AI Image Editor (inpaint prompt assist)
+  'imageEditorPrompt', 'imageEditorPromptNotes',
   // S21
   'branchingPrompt', 'branchingPromptNotes',
   // S22

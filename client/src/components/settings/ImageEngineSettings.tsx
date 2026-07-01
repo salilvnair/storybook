@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { SelectInputView, TextInputView, ToggleSwitchView, ChipView, type SelectOption } from '@salilvnair/dui';
 import { useImageEngineStore } from '../../store/image-engine-store';
 import { SaveButton } from '../SaveButton';
+import { SettingsPanelHeader } from './SettingsPanelHeader';
 
 export function ImageEngineSettings() {
   const { engines, config, loaded, init, setEngine, setUrl, setOption, save, current } = useImageEngineStore();
@@ -19,14 +20,11 @@ export function ImageEngineSettings() {
   const opts = eng?.options;
   const engineOptions: SelectOption[] = engines.map((e) => ({ value: e.id, label: e.label }));
   const url = config.urls[config.engine] || '';
+  const isNoUrl = eng?.noUrl ?? false;
 
   return (
-    <div className="bs-settings-pane bs-custom-provider-pane ie-pane">
-      <div className="bs-settings-section-head">
-        <span style={{ fontSize: 15 }}>🖼️</span>
-        <h3 className="bs-settings-h3">Image Generation Engine</h3>
-        {eng && <ChipView size="sm" color={eng.accent} label={eng.label} />}
-      </div>
+    <div className="bs-settings-pane ie-pane">
+      <SettingsPanelHeader icon="🖼️" title="Image Generation Engine" subtitle="Point iStorybook at your image generation server — local or RunPod." action={eng && <ChipView size="sm" color={eng.accent} label={eng.label} />} />
 
       {/* Engine picker */}
       <label className="bs-custom-provider-label bs-span2 ie-field" style={{ maxWidth: 420 }}>
@@ -54,24 +52,41 @@ export function ImageEngineSettings() {
             </div>
           </div>
           <p className="ie-card-blurb">{eng.blurb}</p>
-          <p className="ie-card-hint">
-            💡 Point this at <b>your own machine</b> (e.g. <code>http://localhost:8080</code> on your Mac/Mac&nbsp;Studio)
-            or a <b>RunPod</b> proxy URL. Storybook calls the engine's API — it never runs the model itself.
-          </p>
+          {!isNoUrl && (
+            <p className="ie-card-hint">
+              💡 Point this at <b>your own machine</b> (e.g. <code>http://localhost:8080</code> on your Mac/Mac&nbsp;Studio)
+              or a <b>RunPod</b> proxy URL. Storybook calls the engine's API — it never runs the model itself.
+            </p>
+          )}
         </div>
       )}
 
-      {/* Dynamic URL field — label follows the selected engine */}
-      <label className="bs-custom-provider-label bs-span2 ie-field">
-        {eng ? `${eng.label} URL` : 'Engine URL'}
-        <TextInputView
-          value={url}
-          width="fw"
-          size="md"
-          placeholder="http://localhost:8080  ·  or  https://xxxxx-8080.proxy.runpod.net"
-          onChange={(e) => setUrl(config.engine, (e.target as HTMLInputElement).value)}
-        />
-      </label>
+      {/* Direct/cloud engines: show API key field; local engines: show URL field */}
+      {isNoUrl ? (
+        <label className="bs-custom-provider-label bs-span2 ie-field">
+          {eng?.label} API Key
+          <TextInputView
+            value={url}
+            width="fw"
+            size="md"
+            type="password"
+            placeholder="sk-or-… (or set OPENROUTER_API_KEY / OPENAI_API_KEY in .env)"
+            onChange={(e) => setUrl(config.engine, (e.target as HTMLInputElement).value)}
+          />
+          <span className="ie-key-hint">Key is stored locally and sent only to {eng?.label}. Leave blank to use the env var.</span>
+        </label>
+      ) : (
+        <label className="bs-custom-provider-label bs-span2 ie-field">
+          {eng ? `${eng.label} URL` : 'Engine URL'}
+          <TextInputView
+            value={url}
+            width="fw"
+            size="md"
+            placeholder="http://localhost:8080  ·  or  https://xxxxx-8080.proxy.runpod.net"
+            onChange={(e) => setUrl(config.engine, (e.target as HTMLInputElement).value)}
+          />
+        </label>
+      )}
 
       {/* Per-engine options — only what this engine supports */}
       {eng && (
@@ -84,9 +99,22 @@ export function ImageEngineSettings() {
           )}
           {opts?.model && eng.models.length > 0 && (
             <label className="ie-opt-row ie-opt-inline">
-              <div className="ie-opt-text"><div className="ie-opt-label">Model variant</div><div className="ie-opt-desc">Which model size to use.</div></div>
+              <div className="ie-opt-text">
+                <div className="ie-opt-label">Model</div>
+                <div className="ie-opt-desc">
+                  {isNoUrl
+                    ? 'Which image model to request from the cloud API.'
+                    : <>Which model size to request. The engine loads <b>one</b> variant at startup — use <b>Auto</b> to accept whatever it&apos;s running.</>}
+                </div>
+              </div>
               <SelectInputView
-                options={[{ value: '', label: 'Auto (server default)' }, ...eng.models.map((m) => ({ value: m, label: m.toUpperCase() }))]}
+                options={[
+                  { value: '', label: isNoUrl ? `Default (${eng.model})` : 'Auto (server default)' },
+                  ...eng.models.map((m) => ({
+                    value: m,
+                    label: m.includes('/') ? m : m.toUpperCase(),
+                  })),
+                ]}
                 value={config.options.model || ''}
                 onChange={(v) => setOption('model', v)}
                 size="sm"
@@ -117,7 +145,11 @@ export function ImageEngineSettings() {
 
       {/* Explicit save — settings auto-apply, but the button confirms + re-syncs the engine to the server. */}
       <div className="ie-save-row">
-        <span className="ie-save-hint">{url ? `Active: ${eng?.label} → ${url}` : 'Set a URL above (local Mac or RunPod) to enable generation.'}</span>
+        <span className="ie-save-hint">
+          {isNoUrl
+            ? (url ? `Active: ${eng?.label} (API key set)` : `No API key — set it above or add the env var to .env`)
+            : (url ? `Active: ${eng?.label} → ${url}` : 'Set a URL above (local Mac or RunPod) to enable generation.')}
+        </span>
         <SaveButton onSave={save} label="Save engine settings" />
       </div>
     </div>

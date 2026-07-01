@@ -30,7 +30,7 @@ export interface Prefs {
 const DEFAULTS: Prefs = {
   accent: 'Amber',
   features: { magicPrompt: true, speechBubbles: true, autoLoadModel: true },
-  readerMode: 'classic',
+  readerMode: 'pageflip',
   showCover: true,
   flipShadow: true,
   flipSpeed: 900,

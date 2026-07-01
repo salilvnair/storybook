@@ -17,6 +17,22 @@ function engineOverride(extra?: { runpodUrl?: string }) {
   return { engine: cfg.engine, url: cfg.urls[cfg.engine] || '', options: cfg.options, ...extra };
 }
 
+/**
+ * Read a fetch Response into JSON without throwing a cryptic error when the body
+ * isn't JSON (e.g. a crashed/unreachable server returns an HTML error page). Turns
+ * any non-OK / non-JSON response into a clear `{ error }`.
+ */
+async function parseJsonSafe(res: Response): Promise<{ error?: string; image_b64?: string; [k: string]: unknown }> {
+  const text = await res.text().catch(() => '');
+  let body: { error?: string; image_b64?: string; [k: string]: unknown } = {};
+  try { body = JSON.parse(text); } catch { /* not JSON */ }
+  if (!res.ok) {
+    const detail = body.error || (text ? text.slice(0, 200) : '');
+    return { error: `HTTP ${res.status}${detail ? `: ${detail}` : ' — the server may be down. Check the server log.'}` };
+  }
+  return body;
+}
+
 /** Which chat + image engine produced this book — saved alongside the bundle. */
 function genMeta() {
   const eng = useImageEngineStore.getState();
@@ -132,8 +148,9 @@ export const useStoryStore = create<StoryState>((set, get) => ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ story, override: engineOverride(override), cast: cast.length ? cast : undefined }),
       });
-      const data = await res.json();
+      const data = await parseJsonSafe(res);
       if (data.error) throw new Error(data.error);
+      if (!data.image_b64) throw new Error('the image engine returned no image (is it running & configured in Settings → Image Engine?)');
       const newCover = data.image_b64 || get().cover;
       set({ cover: newCover, regeneratingCover: false });
       void rebuildPdf(story, newCover, get().pages, set);
@@ -158,8 +175,9 @@ export const useStoryStore = create<StoryState>((set, get) => ({
           ...(lockedSeed != null ? { lockedSeed } : {}),
         }),
       });
-      const data = await res.json();
+      const data = await parseJsonSafe(res);
       if (data.error) throw new Error(data.error);
+      if (!data.image_b64) throw new Error('the image engine returned no image (is it running & configured in Settings → Image Engine?)');
       const pages = [...get().pages];
       pages[index] = { index, title: scene.title, image_b64: data.image_b64 || '' };
       set({ pages, regenerating: null });

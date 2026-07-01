@@ -3,12 +3,24 @@
  * Create/edit/delete "worlds"; assign stories to a world with an episode number and summary.
  */
 import { useEffect, useState } from 'react';
-import { ButtonView, TextInputView, ChipView } from '@salilvnair/dui';
+import { ButtonView, IconButtonView, TextInputView, ChipView } from '@salilvnair/dui';
 import { useWorldsStore, type World } from '../../store/worlds-store';
-import { PlusIcon, TrashIcon } from '../../icons';
+import { TrashIcon } from '../../icons';
+import { SettingsPanelHeader } from './SettingsPanelHeader';
+
+const WORLD_PALETTE = ['#7c3aed', '#0ea5e9', '#10b981', '#f59e0b', '#ec4899', '#ef4444', '#6366f1'];
+const WORLD_ICONS   = ['🪐', '🌍', '🌕', '⭐', '🌌', '🌠', '🔮'];
+
+const accent = (idx: number) => WORLD_PALETTE[idx % WORLD_PALETTE.length];
+const icon   = (idx: number) => WORLD_ICONS[idx % WORLD_ICONS.length];
+
+function fmtDate(iso: string) {
+  try { return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); }
+  catch { return ''; }
+}
 
 export function WorldsManager() {
-  const { worlds, loaded, load, create, update, remove, setActive, activeWorldId } = useWorldsStore();
+  const { worlds, worldStories, loaded, load, create, update, remove, setActive, activeWorldId } = useWorldsStore();
 
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
@@ -28,96 +40,150 @@ export function WorldsManager() {
     setCreating(false);
   };
 
-  const startEdit = (w: World) => {
-    setEditing(w.id); setEditName(w.name); setEditDesc(w.description);
-  };
-
-  const saveEdit = async () => {
+  const startEdit = (w: World) => { setEditing(w.id); setEditName(w.name); setEditDesc(w.description); };
+  const saveEdit  = async () => {
     if (!editing) return;
     await update(editing, { name: editName.trim(), description: editDesc.trim() });
     setEditing(null);
   };
 
+  const storyCount = (id: string) => worldStories.filter((ws) => ws.world_id === id).length;
+
   return (
     <div className="story-tab-scroll">
-    <div className="bs-settings-pane ie-pane" style={{ padding: '0 4px' }}>
-      <div className="bs-settings-section-head">
-        <span style={{ fontSize: 15 }}>🪐</span>
-        <h3 className="bs-settings-h3">Story Universe</h3>
-        <ChipView size="sm" color="#7c3aed" label={`${worlds.length} world${worlds.length !== 1 ? 's' : ''}`} />
-      </div>
+      <div className="wm-root">
 
-      <p className="wm-desc">
-        Group stories into a series. The active world injects continuity context (characters, prior events) into each new story you generate.
-      </p>
+        <SettingsPanelHeader icon="🌌" title="Story Universe" subtitle="Group stories into a series with shared characters and continuity." action={<ChipView size="sm" color="#7c3aed" label={`${worlds.length} world${worlds.length !== 1 ? 's' : ''}`} />} />
 
-      {/* Active world indicator */}
-      {activeWorldId && (
-        <div className="wm-active-banner">
-          🌐 Active universe: <strong>{worlds.find((w) => w.id === activeWorldId)?.name ?? '—'}</strong>
-          <button className="wm-clear-btn" onClick={() => setActive(null)}>Clear</button>
-        </div>
-      )}
+        {/* ── Active banner ───────────────────────────────────────── */}
+        {activeWorldId && (() => {
+          const w = worlds.find((w) => w.id === activeWorldId);
+          const idx = worlds.findIndex((w) => w.id === activeWorldId);
+          const c = accent(idx);
+          return w ? (
+            <div className="wm-active-banner" style={{ borderColor: c + '55', background: c + '0e' }}>
+              <span className="wm-active-planet" style={{ color: c }}>{icon(idx)}</span>
+              <span>Active universe: <strong style={{ color: c }}>{w.name}</strong></span>
+              <ButtonView size="xs" accentColor="rgba(255,255,255,0.2)" onClick={() => setActive(null)}>
+                Clear
+              </ButtonView>
+            </div>
+          ) : null;
+        })()}
 
-      {/* World list */}
-      <div className="wm-list">
-        {worlds.length === 0 && <div className="wm-empty">No worlds yet. Create one below.</div>}
-        {worlds.map((w) => (
-          <div key={w.id} className={`wm-card${activeWorldId === w.id ? ' wm-card-active' : ''}`}>
-            {editing === w.id ? (
-              <div className="wm-edit-form">
-                <TextInputView value={editName} onChange={(e) => setEditName((e.target as HTMLInputElement).value)} size="sm" width="fw" placeholder="World name" />
-                <TextInputView value={editDesc} onChange={(e) => setEditDesc((e.target as HTMLInputElement).value)} size="sm" width="fw" placeholder="Description (optional)" />
-                <div className="wm-edit-btns">
-                  <ButtonView size="sm" label="Save" onClick={saveEdit} />
-                  <ButtonView size="sm" label="Cancel" variant="ghost" onClick={() => setEditing(null)} />
-                </div>
-              </div>
-            ) : (
-              <>
-                <div className="wm-card-head">
-                  <span className="wm-card-name">{w.name}</span>
-                  <div className="wm-card-actions">
-                    <button className="wm-icon-btn" onClick={() => setActive(activeWorldId === w.id ? null : w.id)} title="Set as active universe">
-                      {activeWorldId === w.id ? '★' : '☆'}
-                    </button>
-                    <button className="wm-icon-btn" onClick={() => startEdit(w)} title="Edit">✏</button>
-                    <button className="wm-icon-btn wm-icon-del" onClick={() => void remove(w.id)} title="Delete world"><TrashIcon size={12} /></button>
+        {/* ── World list ──────────────────────────────────────────── */}
+        {worlds.length === 0 ? (
+          <div className="wm-empty-state">
+            <div className="wm-empty-icon">🌌</div>
+            <div className="wm-empty-title">No worlds yet</div>
+            <div className="wm-empty-sub">Create your first universe below and start building a series</div>
+          </div>
+        ) : (
+          <div className="wm-list">
+            {worlds.map((w, idx) => {
+              const isActive = activeWorldId === w.id;
+              const c = accent(idx);
+              const planet = icon(idx);
+              const sc = storyCount(w.id);
+
+              return (
+                <div key={w.id} className={`wm-card${isActive ? ' wm-card-active' : ''}`}
+                  style={{ '--wm-c': c } as React.CSSProperties}>
+
+                  {/* Accent stripe */}
+                  <div className="wm-stripe" style={{ background: `linear-gradient(180deg, ${c}, ${c}55)` }} />
+
+                  <div className="wm-card-body">
+                    {editing === w.id ? (
+                      /* ── Edit form ── */
+                      <div className="wm-edit-form">
+                        <TextInputView size="md" width="fw" value={editName} placeholder="Universe name"
+                          onChange={(v) => setEditName(v)} />
+                        <TextInputView size="md" width="fw" value={editDesc} placeholder="Short description (optional)"
+                          onChange={(v) => setEditDesc(v)} />
+                        <div className="wm-edit-btns">
+                          <ButtonView size="sm" accentColor={c} onClick={saveEdit}>Save</ButtonView>
+                          <ButtonView size="sm" accentColor="rgba(255,255,255,0.2)" onClick={() => setEditing(null)}>Cancel</ButtonView>
+                        </div>
+                      </div>
+                    ) : (
+                      /* ── Card display ── */
+                      <>
+                        <div className="wm-card-top">
+                          <span className="wm-planet" style={{ color: c, textShadow: `0 0 18px ${c}88` }}>{planet}</span>
+                          <div className="wm-card-info">
+                            <div className="wm-card-nameline">
+                              <span className="wm-card-name">{w.name}</span>
+                              {isActive && <ChipView size="xs" color={c} label="ACTIVE UNIVERSE" />}
+                            </div>
+                            {w.description && <div className="wm-card-desc">{w.description}</div>}
+                          </div>
+                          <div className="wm-card-actions">
+                            <div>
+                              <IconButtonView size="sm"
+                                icon={<span style={{ fontSize: 14, color: isActive ? c : 'var(--color-text-muted)' }}>{isActive ? '★' : '☆'}</span>}
+                                onClick={() => setActive(isActive ? null : w.id)}
+                                tooltip={isActive ? 'Deactivate universe' : 'Set as active universe'} />
+                            </div>
+                            <div>
+                              <IconButtonView size="sm"
+                                icon={<span style={{ fontSize: 13 }}>✏️</span>}
+                                onClick={() => startEdit(w)}
+                                tooltip="Edit world" />
+                            </div>
+                            <div>
+                              <IconButtonView size="sm"
+                                icon={<TrashIcon size={13} />}
+                                onClick={() => void remove(w.id)}
+                                tooltip="Delete world" />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Stats row */}
+                        <div className="wm-stats">
+                          <span className="wm-stat-chip" style={{ background: c + '18', color: c, borderColor: c + '40' }}>
+                            📖 {sc} {sc === 1 ? 'story' : 'stories'}
+                          </span>
+                          <span className="wm-stat-chip" style={{ background: 'rgba(255,255,255,0.04)', color: 'var(--color-text-muted)', borderColor: 'rgba(255,255,255,0.08)' }}>
+                            🗓 {fmtDate(w.created_at)}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
-                {w.description && <p className="wm-card-desc">{w.description}</p>}
-              </>
-            )}
+              );
+            })}
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* Create new world */}
-      <div className="wm-create">
-        <div className="wm-create-head">
-          <PlusIcon size={13} /> New world
+        {/* ── Create new world ─────────────────────────────────────── */}
+        <div className="wm-create-card">
+          <div className="wm-create-title">
+            <span style={{ fontSize: 16 }}>✦</span> New Universe
+          </div>
+          <div className="wm-create-fields">
+            <TextInputView size="md" width="fw" value={newName}
+              placeholder="Universe name — e.g. «Fern Forest Chronicles»"
+              onChange={(v) => setNewName(v)} />
+            <TextInputView size="md" width="fw" value={newDesc}
+              placeholder="Short description (optional)"
+              onChange={(v) => setNewDesc(v)} />
+          </div>
+          <div className="wm-create-footer">
+            <ButtonView size="md" accentColor="#7c3aed"
+              disabled={!newName.trim() || creating}
+              onClick={() => void handleCreate()}>
+              {creating ? 'Creating…' : 'Create Universe'}
+            </ButtonView>
+          </div>
         </div>
-        <TextInputView
-          value={newName} size="sm" width="fw" placeholder="World name (e.g. «Fern Forest Chronicles»)"
-          onChange={(e) => setNewName((e.target as HTMLInputElement).value)}
-        />
-        <TextInputView
-          value={newDesc} size="sm" width="fw" placeholder="Short description (optional)"
-          onChange={(e) => setNewDesc((e.target as HTMLInputElement).value)}
-        />
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <ButtonView
-            size="sm" label={creating ? 'Creating…' : 'Create world'}
-            disabled={!newName.trim() || creating}
-            onClick={() => void handleCreate()}
-          />
-        </div>
-      </div>
 
-      <div className="wm-hint">
-        💡 To link a finished story to a world, open it in the book viewer and use the Universe panel in the toolbar.
+        <div className="wm-hint">
+          💡 To link a finished story to a universe, open it in the book viewer and use the Universe panel in the toolbar.
+        </div>
       </div>
-    </div>
     </div>
   );
 }

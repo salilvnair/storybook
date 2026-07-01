@@ -14,9 +14,21 @@ import { conversationRouter } from './routes/conversation.js';
 import { runpodRouter } from './routes/runpod.js';
 import { storybookRouter } from './routes/storybook.js';
 import { templateRouter } from './routes/template.js';
+import { characterRouter } from './routes/character.js';
 import { devtoolsRouter } from './routes/devtools.js';
+import { providersSDKRouter } from './routes/providers.js';
+import { apiRouter } from './routes/api.js';
+import { pluginsRouter } from './routes/plugins.js';
+import { configExportRouter } from './routes/config-export.js';
+import { observabilityRouter } from './routes/observability.js';
+import { designerBlocksRouter } from './routes/designer-blocks.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Keep the server alive if a single request handler throws/rejects unexpectedly —
+// one buggy route should degrade to a 500, not take down the whole backend.
+process.on('unhandledRejection', (reason) => console.error('[unhandledRejection]', reason));
+process.on('uncaughtException', (err) => console.error('[uncaughtException]', err));
 
 const app = express();
 app.use(cors());
@@ -37,7 +49,22 @@ app.use(conversationRouter());
 app.use(runpodRouter());
 app.use(storybookRouter());
 app.use(templateRouter());
+app.use(characterRouter());
 app.use(devtoolsRouter());
+app.use(providersSDKRouter());
+app.use(apiRouter());
+app.use(pluginsRouter());
+app.use(configExportRouter());
+app.use(observabilityRouter());
+app.use(designerBlocksRouter());
+
+// ── API error safety net — a bug in ONE route must never 500-crash the whole
+//    server (e.g. a sync throw in an async handler). Returns JSON instead. ──
+app.use('/api', (err, _req, res, _next) => {
+  console.error('[api error]', err);
+  if (res.headersSent) return;
+  res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+});
 
 // ── Serve built client in production ─────────────────────────────────────────
 const clientDist = path.resolve(__dirname, '..', 'client', 'dist');

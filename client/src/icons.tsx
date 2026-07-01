@@ -15,6 +15,35 @@ function Svg({ size = 16, children, ...rest }: IconProps & { children: React.Rea
 export const BookIcon = (p: IconProps) => (
   <Svg {...p}><path d="M4 5a2 2 0 0 1 2-2h12v16H6a2 2 0 0 0-2 2z" /><path d="M18 17H6a2 2 0 0 0-2 2" /></Svg>
 );
+// Panel show/hide toggles (ported from DUI daakia-icons: SidebarLeftIcon / SidebarRightIcon)
+export const SidebarLeftIcon = (p: IconProps) => (
+  <Svg {...p}><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="9" y1="3" x2="9" y2="21" /><rect x="3" y="3" width="6" height="18" rx="2" fill="currentColor" stroke="none" fillOpacity={0.35} /></Svg>
+);
+export const SidebarRightIcon = (p: IconProps) => (
+  <Svg {...p}><rect x="3" y="3" width="18" height="18" rx="2" /><line x1="15" y1="3" x2="15" y2="21" /><rect x="15" y="3" width="6" height="18" rx="2" fill="currentColor" stroke="none" fillOpacity={0.35} /></Svg>
+);
+// Layer/context-menu icons (ported from DUI daakia-icons)
+export const EyeIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></Svg>
+);
+export const EyeOffIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></Svg>
+);
+export const ArrowUpIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M12 19V5" /><path d="m5 12 7-7 7 7" /></Svg>
+);
+export const ArrowDownIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M12 5v14" /><path d="m19 12-7 7-7-7" /></Svg>
+);
+export const MoreHorizontalIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none" /></Svg>
+);
+export const PasteIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2" /><rect x="8" y="2" width="8" height="4" rx="1" ry="1" /></Svg>
+);
+export const DuplicateIcon = (p: IconProps) => (
+  <Svg {...p}><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></Svg>
+);
 export const PaletteIcon = (p: IconProps) => (
   <Svg {...p}><path d="M12 21a9 9 0 1 1 0-18c4.97 0 9 3.58 9 8 0 2.5-2 4-4 4h-2a2 2 0 0 0-1.5 3.3A2 2 0 0 1 12 21z" /><circle cx="7.5" cy="10.5" r="1" fill="currentColor" /><circle cx="12" cy="7.5" r="1" fill="currentColor" /><circle cx="16.5" cy="10.5" r="1" fill="currentColor" /></Svg>
 );
@@ -48,6 +77,7 @@ export const StarIcon = (p: IconProps) => (
   <Svg {...p}><path d="M12 3l2.9 5.9 6.1.9-4.4 4.3 1 6.1L12 17.8 6.4 20.2l1-6.1L3 9.8l6.1-.9z" /></Svg>
 );
 export const ChevronRightIcon = (p: IconProps) => (<Svg {...p}><path d="M9 6l6 6-6 6" /></Svg>);
+export const SearchIcon = (p: IconProps) => (<Svg {...p}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" /></Svg>);
 export const ChevronLeftIcon = (p: IconProps) => (<Svg {...p}><path d="M15 6l-6 6 6 6" /></Svg>);
 export const CheckIcon = (p: IconProps) => (<Svg {...p}><path d="M20 6 9 17l-5-5" /></Svg>);
 export const CopyIcon = (p: IconProps) => (
@@ -74,3 +104,20 @@ export const MicIcon = (p: IconProps) => (<Svg {...p}><path d="M12 2a3 3 0 0 1 3
 export const VolumeIcon = (p: IconProps) => (<Svg {...p}><path d="M11 5 6 9H2v6h4l5 4V5z" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14" /></Svg>);
 export const MusicIcon = (p: IconProps) => (<Svg {...p}><path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" /></Svg>);
 export const GlobeIcon = (p: IconProps) => (<Svg {...p}><circle cx="12" cy="12" r="10" /><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></Svg>);
+export const PlugIcon = (p: IconProps) => (<Svg {...p}><path d="M7 2v4M17 2v4M8 10h8M7 6h10a2 2 0 0 1 2 2v2a6 6 0 0 1-12 0V8a2 2 0 0 1 2-2z" /><path d="M12 16v4" /></Svg>);
+export const WorkflowIcon = (p: IconProps) => (<Svg {...p}><rect x="3" y="3" width="6" height="6" rx="1" /><rect x="15" y="3" width="6" height="6" rx="1" /><rect x="9" y="15" width="6" height="6" rx="1" /><path d="M6 9v3a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V9" /></Svg>);
+export const BarChartIcon = (p: IconProps) => (<Svg {...p}><path d="M18 20V10M12 20V4M6 20v-6" /></Svg>);
+export const CodeIcon = (p: IconProps) => (<Svg {...p}><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></Svg>);
+export const HeartIcon = (p: IconProps) => (<Svg {...p}><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></Svg>);
+export const InfinityIcon = (p: IconProps) => (<Svg {...p}><path d="M12 12c-2-2.5-4-4-6-4a4 4 0 0 0 0 8c2 0 4-1.5 6-4zM12 12c2 2.5 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.5-6 4z" /></Svg>);
+export const PencilIcon  = (p: IconProps) => (<Svg {...p}><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" /><path d="m15 5 4 4" /></Svg>);
+export const EraserIcon  = (p: IconProps) => (<Svg {...p}><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" /><path d="M22 21H7" /><path d="m5 11 9 9" /></Svg>);
+export const UndoIcon    = (p: IconProps) => (<Svg {...p}><path d="M3 7v6h6" /><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13" /></Svg>);
+export const ZoomInIcon  = (p: IconProps) => (<Svg {...p}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35" /><path d="M8 11h6M11 8v6" /></Svg>);
+export const ZoomOutIcon = (p: IconProps) => (<Svg {...p}><circle cx="11" cy="11" r="7" /><path d="M21 21l-4.35-4.35M8 11h6" /></Svg>);
+export const ExpandIcon  = (p: IconProps) => (<Svg {...p}><path d="M3 8V5a2 2 0 0 1 2-2h3M21 8V5a2 2 0 0 1-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M21 16v3a2 2 0 0 1-2 2h-3" /></Svg>);
+export const AgentIcon    = (p: IconProps) => (<Svg {...p}><path d="M6 6a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6z" /><path d="M12 2v2" /><path d="M9 12v9" /><path d="M15 12v9" /><path d="M5 16l4-2" /><path d="M15 14l4 2" /><path d="M9 18h6" /><path d="M10 8v.01" /><path d="M14 8v.01" /></Svg>);
+export const RotateCWIcon  = (p: IconProps) => (<Svg {...p}><path d="M21 2v6h-6" /><path d="M21 8a9 9 0 1 1-9-9" /></Svg>);
+export const FlipHIcon     = (p: IconProps) => (<Svg {...p}><path d="M12 3v18" /><path d="M8 7 4 12l4 5" /><path d="M16 7l4 5-4 5" /></Svg>);
+export const FlipVIcon     = (p: IconProps) => (<Svg {...p}><path d="M3 12h18" /><path d="M7 8l5-4 5 4" /><path d="M7 16l5 4 5-4" /></Svg>);
+export const ResetIcon     = (p: IconProps) => (<Svg {...p}><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></Svg>);

@@ -8,6 +8,7 @@ import { ButtonView, TextInputView, ToggleSwitchView, ChipView } from '@salilvna
 import { useVoicesStore } from '../../store/voices-store';
 import { useAudioEngineStore } from '../../store/audio-engine-store';
 import { MicIcon, TrashIcon } from '../../icons';
+import { SettingsPanelHeader } from './SettingsPanelHeader';
 
 function formatDate(iso: string) {
   try { return new Date(iso).toLocaleDateString(); } catch { return iso; }
@@ -73,19 +74,8 @@ export function VoiceLibrary() {
 
   return (
     <div className="story-tab-scroll">
-      <div className="bs-settings-pane bs-custom-provider-pane ie-pane">
-        <div className="bs-settings-section-head">
-          <MicIcon size={15} style={{ color: '#a78bfa' }} />
-          <h3 className="bs-settings-h3">Voice Library</h3>
-          {canClone
-            ? <ChipView size="sm" color="#a78bfa" label="voice cloning supported" />
-            : <ChipView size="sm" color="#64748b" label={`${engineLabel} — no cloning`} />}
-        </div>
-        <p className="story-settings-lead" style={{ marginTop: 4 }}>
-          Clone a voice from a short audio sample (≥5 s). The sample is sent only to your local
-          TTS engine — it is never stored on disk by iStorybook. Assign cloned voices to characters
-          in <b>Settings → Characters</b>.
-        </p>
+      <div className="bs-settings-pane ie-pane">
+        <SettingsPanelHeader icon="🎤" title="Voices" subtitle="Clone voices from short audio samples. Assign them to characters in Character Studio." action={canClone ? <ChipView size="sm" color="#a78bfa" label="cloning supported" /> : <ChipView size="sm" color="#64748b" label={`${engineLabel} — no cloning`} />} />
 
         {/* ── Cloned voice list ── */}
         {voices.length > 0 && (

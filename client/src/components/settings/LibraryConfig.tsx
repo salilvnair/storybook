@@ -3,6 +3,7 @@
  * Configures which page-turn experience to use when opening a book.
  */
 import { SelectInputView, ToggleSwitchView } from '@salilvnair/dui';
+import { SettingsPanelHeader } from './SettingsPanelHeader';
 import { usePrefsStore } from '../../store/prefs-store';
 import { SaveButton } from '../SaveButton';
 
@@ -11,29 +12,22 @@ export function LibraryConfig() {
 
   return (
     <div className="story-tab-scroll">
-    <div className="bs-settings-pane bs-custom-provider-pane ie-pane">
-      <div className="bs-settings-section-head">
-        <span style={{ fontSize: 15 }}>📚</span>
-        <h3 className="bs-settings-h3">Library Reader Config</h3>
-      </div>
-      <p className="story-settings-lead">
-        Choose how storybooks open when you click them in the Library.
-        The Page Flip mode uses a realistic page-turn animation.
-      </p>
+    <div className="bs-settings-pane ie-pane">
+      <SettingsPanelHeader icon="📚" title="Library Config" subtitle="Choose how storybooks open — classic 3D flip or realistic page-curl animation." />
 
       <div className="ie-opts">
         <label className="ie-opt-row ie-opt-inline">
           <div className="ie-opt-text">
             <div className="ie-opt-label">Reader mode</div>
-            <div className="ie-opt-desc">Classic uses our built-in 3D flip. Page Flip uses react-pageflip for a physical page-curl effect.</div>
+            <div className="ie-opt-desc">Both use the physical page-flip book. 3D turns every page rigidly (like the cover); Page Flip lets the inner pages curl softly.</div>
           </div>
           <SelectInputView
             options={[
-              { value: 'classic', label: 'Classic (built-in 3D)' },
               { value: 'pageflip', label: 'Page Flip (physical curl)' },
+              { value: 'classic', label: '3D (rigid page turn)' },
             ]}
-            value={prefs.readerMode || 'classic'}
-            onChange={(v) => set('readerMode', v)}
+            value={prefs.readerMode || 'pageflip'}
+            onChange={(v) => set('readerMode', v as 'classic' | 'pageflip')}
             size="sm"
           />
         </label>
@@ -54,7 +48,7 @@ export function LibraryConfig() {
         <label className="ie-opt-row ie-opt-inline">
           <div className="ie-opt-text">
             <div className="ie-opt-label">Draw page shadows</div>
-            <div className="ie-opt-desc">Render drop shadows during the flip animation.</div>
+            <div className="ie-opt-desc">Render drop shadows during the flip animation (Page Flip mode).</div>
           </div>
           <ToggleSwitchView
             checked={prefs.flipShadow !== false}
@@ -67,7 +61,7 @@ export function LibraryConfig() {
         <label className="ie-opt-row ie-opt-inline">
           <div className="ie-opt-text">
             <div className="ie-opt-label">Flip animation speed</div>
-            <div className="ie-opt-desc">How fast the page turns (ms).</div>
+            <div className="ie-opt-desc">How fast the page turns in Page Flip mode (ms).</div>
           </div>
           <SelectInputView
             options={[

@@ -16,14 +16,20 @@
  *   - Auto-advance to next page when all segments finish
  *   - Per-segment download button
  */
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, type ReactNode } from 'react';
+import { ModalView, ButtonView, SelectInputView, TextInputView } from '@salilvnair/dui';
+import { FlipBook, FlipPage, interiorDensity, type FlipBookHandle } from './FlipBook';
+import { PlusIcon } from '../../icons';
+import { usePrefsStore } from '../../store/prefs-store';
 import { useStoryStore } from '../../store/story-store';
 import { useCharactersStore } from '../../store/characters-store';
 import { useVoicesStore } from '../../store/voices-store';
 import { usePromptsStore } from '../../store/prompts-store';
 import { useMusicEngineStore } from '../../store/music-engine-store';
+import { useAudioEngineStore } from '../../store/audio-engine-store';
 import { useLearningStore } from '../../store/learning-store';
 import { useWorldsStore } from '../../store/worlds-store';
+import { useLanguageConfigStore } from '../../store/language-config-store';
 import { STYLE_PRESETS } from '../../constants/style-presets';
 import { sfxPageTurn, sfxSparkle, sfxSuccess, sfxStoryEnd } from '../../utils/sfx';
 import { BranchMap } from './BranchMap';
@@ -61,13 +67,6 @@ function base64ToBlob(b64: string, mime: string) {
 function tokenise(text: string): string[] {
   return text.split(/\s+/).filter(Boolean);
 }
-
-// ── Page-turn state ───────────────────────────────────────────────────────────
-
-interface Turn { dir: 1 | -1; rot: number; settling?: 'commit' | 'revert' }
-
-const FOLD = 180;
-const THRESHOLD = 0.3;
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -162,10 +161,49 @@ interface ArtSuggestion {
 const MUSIC_MOODS = ['calm', 'playful', 'adventurous', 'dreamy', 'whimsical'] as const;
 type MusicMood = typeof MUSIC_MOODS[number];
 
+/**
+ * NoFlip — wraps interactive in-page controls (regenerate overlay, narration bar,
+ * branch choices). react-pageflip attaches a NATIVE mousedown/touchstart listener
+ * to the page block to start a drag; that swallows clicks on buttons rendered
+ * inside a page. React's synthetic stopPropagation doesn't stop the native event,
+ * so we attach real bubble-phase listeners that stop pointer/mouse/touch-down from
+ * ever reaching react-pageflip — the button's click then fires normally.
+ */
+function NoFlip({ children, className }: { children: ReactNode; className?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const stop = (e: Event) => e.stopPropagation();
+    el.addEventListener('pointerdown', stop);
+    el.addEventListener('mousedown', stop);
+    el.addEventListener('touchstart', stop, { passive: true });
+    return () => {
+      el.removeEventListener('pointerdown', stop);
+      el.removeEventListener('mousedown', stop);
+      el.removeEventListener('touchstart', stop);
+    };
+  }, []);
+  return <div ref={ref} className={className}>{children}</div>;
+}
+
 export function LiveBookFlip() {
-  const { story, cover, pages, phase, progress, genStep, regenerating, regeneratingCover, regeneratePage, regenerateCover, setStory, storyId } = useStoryStore();
+  // The reader-mode switch lives INSIDE LiveBookFlipInner now: the full-featured
+  // reader (toolbars, narration, regenerate, designer) gains the react-pageflip
+  // page-curl when readerMode === 'pageflip', instead of swapping to a bare reader.
+  return <LiveBookFlipInner />;
+}
+
+function LiveBookFlipInner() {
+  const { story, cover, pages, phase, progress, genStep, regenerating, regeneratingCover, regeneratePage, regenerateCover, setStory, storyId, warns } = useStoryStore();
   const { set: setPrompt } = usePromptsStore();
   const musicStore = useMusicEngineStore();
+
+  // Page-flip reader (react-pageflip) — same setting that drives the Library reader.
+  const readerMode = usePrefsStore((st) => st.prefs.readerMode);
+  const flipRef = useRef<FlipBookHandle | null>(null);
+  // Read-aloud is only offered when the voice (audio) engine is actually healthy.
+  const voiceOk = useAudioEngineStore((st) => st.health.ok);
 
   const heroSeed = useCharactersStore((s) => {
     const selected = s.characters.filter((c) => s.selectedIds.includes(c.id));
@@ -179,7 +217,6 @@ export function LiveBookFlip() {
   });
 
   const [s, setS] = useState(0);
-  const [turn, setTurn] = useState<Turn | null>(null);
   const [narr, setNarr] = useState<Record<number, PageNarr>>({});
   const [playingPage, setPlayingPage] = useState<number | null>(null);
   const [autoAdvance, setAutoAdvance] = useState(false);
@@ -204,10 +241,17 @@ export function LiveBookFlip() {
   const [visitedBranch, setVisitedBranch] = useState<Set<number>>(new Set([0]));
   const [showBranchMap, setShowBranchMap] = useState(false);
   const [branchBusy, setBranchBusy] = useState(false);
+  // Transient notice for tool actions (Branch / Vocab) so they never fail silently.
+  const [toolNotice, setToolNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
 
   // S22 — Language / reading level
   const [showLangPanel, setShowLangPanel] = useState(false);
-  const [targetLang, setTargetLang] = useState('Spanish');
+  // Enabled translation languages, in the user's configured order (Settings → Language Config).
+  // NOTE: select the STABLE `languages` array (filtering inside the selector returns a
+  // new array each render → infinite re-render). Derive `enabledLangs` in the body.
+  const allLangs = useLanguageConfigStore((s) => s.languages);
+  const enabledLangs = allLangs.filter((l) => l.enabled);
+  const [targetLang, setTargetLang] = useState(() => useLanguageConfigStore.getState().enabled()[0]?.id ?? 'hindi');
   const [readingLevel, setReadingLevel] = useState<'pre-reader' | 'early-reader' | 'confident-reader'>('early-reader');
   const [langBusy, setLangBusy] = useState(false);
   const [phonicsWords, setPhonicsWords] = useState('');
@@ -230,13 +274,13 @@ export function LiveBookFlip() {
   const [showUniversePanel, setShowUniversePanel] = useState(false);
   const [newEpisode, setNewEpisode] = useState(1);
   const [newSummary, setNewSummary] = useState('');
+  // Create-universe sub-modal (so a new world can be made without leaving the reader)
+  const [showCreateWorld, setShowCreateWorld] = useState(false);
+  const [newWorldName, setNewWorldName] = useState('');
+  const [newWorldDesc, setNewWorldDesc] = useState('');
+  const [worldBusy, setWorldBusy] = useState(false);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const bookRef = useRef<HTMLDivElement>(null);
-  const active = useRef(false);
-  const startX = useRef(0);
-  const pageW = useRef(340);
-  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Keep a ref to sceneCount so onended closures don't go stale
   const sceneCountRef = useRef(0);
   const autoAdvanceRef = useRef(autoAdvance);
@@ -245,7 +289,7 @@ export function LiveBookFlip() {
   const sceneCount = story?.scenes?.length ?? 0;
   sceneCountRef.current = sceneCount;
   autoAdvanceRef.current = autoAdvance;
-  const total = sceneCount + 2;
+  const total = sceneCount + 2;                 // spreads: cover + scenes + back
 
   // Resolve 'clone:id' → actual TTS voice id
   const resolveVoice = useCallback((voiceId: string | null | undefined): string => {
@@ -354,18 +398,31 @@ export function LiveBookFlip() {
   // ── S21 — Branching helpers ───────────────────────────────────────────────
   const addBranching = useCallback(async () => {
     if (!story) return;
+    if ((story.scenes?.length ?? 0) < 2) {
+      setToolNotice({ kind: 'info', text: '🌳 Branching needs a longer story — generate one with 3+ pages, then add choose-your-adventure choices.' });
+      return;
+    }
     setBranchBusy(true);
+    setToolNotice(null);
     try {
       const res = await fetch('/api/storybook/add-choices', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ story }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        let detail = body; try { detail = JSON.parse(body).error || body; } catch { /* */ }
+        throw new Error(detail || `HTTP ${res.status}`);
+      }
       const data = await res.json() as { story: typeof story };
       setStory(data.story);
       setBranchSceneIdx(0); setBranchHistory([]); setVisitedBranch(new Set([0]));
       sfxSuccess();
-    } catch { /* ignore */ } finally { setBranchBusy(false); }
+      setToolNotice({ kind: 'info', text: '🌳 Choose-your-adventure choices added — pick options on the pages.' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setToolNotice({ kind: 'error', text: `🌳 Couldn't add branching: ${msg}. (Is the Chat engine configured in Settings → Chat Engine?)` });
+    } finally { setBranchBusy(false); }
   }, [story, setStory]);
 
   const pickBranchChoice = useCallback((nextIdx: number) => {
@@ -393,17 +450,29 @@ export function LiveBookFlip() {
   // ── S22 — Language / level ────────────────────────────────────────────────
   const translateStory = useCallback(async () => {
     if (!story) return;
+    // Resolve the selected language id → the phrase the LLM should translate into
+    // (Manglish → "Malayalam in English letters…", etc.).
+    const lang = useLanguageConfigStore.getState().languages.find((l) => l.id === targetLang);
+    const targetLanguage = lang ? (lang.translateAs || lang.label) : targetLang;
     setLangBusy(true);
+    setToolNotice(null);
     try {
       const res = await fetch('/api/storybook/translate', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ story, targetLanguage: targetLang }),
+        body: JSON.stringify({ story, targetLanguage }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const body = await res.text().catch(() => '');
+        let detail = body; try { detail = JSON.parse(body).error || body; } catch { /* */ }
+        throw new Error(detail || `HTTP ${res.status}`);
+      }
       const data = await res.json() as { story: typeof story };
       setStory(data.story);
       sfxSuccess();
-    } catch { /* ignore */ } finally { setLangBusy(false); setShowLangPanel(false); }
+      setShowLangPanel(false);
+    } catch (err) {
+      setToolNotice({ kind: 'error', text: `🌍 Translation failed: ${err instanceof Error ? err.message : String(err)}. (Is the Chat engine configured?)` });
+    } finally { setLangBusy(false); }
   }, [story, targetLang, setStory]);
 
   const adaptLevel = useCallback(async (level: typeof readingLevel) => {
@@ -459,28 +528,16 @@ export function LiveBookFlip() {
     sfxSuccess();
   }, [storyId, newEpisode, newSummary, worlds]);
 
-  // ── auto-advance while generating ─────────────────────────────────────────
-  useEffect(() => {
-    if (!isGenerating) return;
-    const arrived = pages.filter((p) => p.image_b64).length;
-    setS(arrived);
-  }, [pages, isGenerating]);
-
-  useEffect(() => {
-    if (phase === 'generating' && !cover && pages.every((p) => !p.image_b64)) setS(0);
-  }, [phase, cover, pages]);
-
   // ── Segment playback engine ────────────────────────────────────────────────
   const playSegment = useCallback(async (pageIdx: number, segs: NarrSegment[], segIdx: number) => {
     if (segIdx >= segs.length) {
       // All segments done — mark ready, clear karaoke
       setNarr((prev) => ({ ...prev, [pageIdx]: { ...prev[pageIdx], status: 'ready', curSeg: 0, wordIdx: -1 } }));
       setPlayingPage(null);
-      // Auto-advance
+      // Auto-advance — physically turn the book to the next page, then narrate it.
       if (autoAdvanceRef.current && pageIdx < sceneCountRef.current) {
         const next = pageIdx + 1;
-        setS(next);
-        // Brief delay then auto-narrate next page
+        flipRef.current?.flipToSpread(next);
         setTimeout(() => void narratePageInner(next), 600);
       }
       return;
@@ -637,18 +694,18 @@ export function LiveBookFlip() {
 
         {/* S21 — Branch choices */}
         {sc?.choices && sc.choices.length > 0 && isDonePhase && (
-          <div className="lbf-choices">
+          <NoFlip className="lbf-choices">
             <div className="lbf-choices-label">What happens next?</div>
             {sc.choices.map((ch, ci) => (
               <button key={ci} className="lbf-choice-btn" onClick={() => pickBranchChoice(ch.nextSceneIndex)}>
                 {ch.text}
               </button>
             ))}
-          </div>
+          </NoFlip>
         )}
 
-        {isDonePhase && (
-          <div className="lbf-narr-bar">
+        {isDonePhase && voiceOk && (
+          <NoFlip className="lbf-narr-bar">
             {(!pn || pn.status === 'idle') && (
               <button className="lbf-narr-btn" onClick={() => void narratePage(k)}>🔊 Read aloud</button>
             )}
@@ -679,7 +736,7 @@ export function LiveBookFlip() {
               <input type="checkbox" checked={autoAdvance} onChange={(e) => setAutoAdvance(e.target.checked)} />
               <span>auto-advance</span>
             </label>
-          </div>
+          </NoFlip>
         )}
       </div>
     );
@@ -704,11 +761,25 @@ export function LiveBookFlip() {
 
     if (k === 0) {
       if (!cover) {
+        // Still generating → spinner. Generation over but no cover → it FAILED;
+        // show the real reason + a retry instead of spinning forever.
+        if (isGenerating || isRegenThis) {
+          return (
+            <div className="bp-art lbf-loading-art">
+              <div className="lbf-cover-text">Creating cover page</div>
+              <span className="story-progress-spinner" />
+              {genStep && <StepMeta gs={genStep} />}
+            </div>
+          );
+        }
+        const coverWarn = [...warns].reverse().find((w) => /cover/i.test(w));
         return (
-          <div className="bp-art lbf-loading-art">
-            <div className="lbf-cover-text">Creating cover page</div>
-            <span className="story-progress-spinner" />
-            {genStep && <StepMeta gs={genStep} />}
+          <div className="bp-art lbf-failed-art">
+            <div className="lbf-failed-title">⚠️ Cover image failed</div>
+            {coverWarn && <div className="lbf-failed-msg">{coverWarn}</div>}
+            <NoFlip className="lbf-failed-actions">
+              <button className="lbf-failed-btn" onClick={(e) => { e.stopPropagation(); void regenerateCover(); }}>↻ Try again</button>
+            </NoFlip>
           </div>
         );
       }
@@ -716,7 +787,7 @@ export function LiveBookFlip() {
         <div className="bp-art">
           <img src={`data:image/png;base64,${cover}`} alt="Cover" draggable={false} />
           {(isDone || isRegenThis) && (
-            <div className={`lbf-regen-overlay${isRegenThis ? ' lbf-regen-busy' : ''}`}>
+            <NoFlip className={`lbf-regen-overlay${isRegenThis ? ' lbf-regen-busy' : ''}`}>
               {isRegenThis
                 ? <span className="story-progress-spinner" />
                 : (
@@ -727,7 +798,7 @@ export function LiveBookFlip() {
                   </>
                 )
               }
-            </div>
+            </NoFlip>
           )}
         </div>
       );
@@ -735,13 +806,27 @@ export function LiveBookFlip() {
 
     const page = pages[k - 1];
     if (!page?.image_b64) {
-      const isCurrentAndBusy = isGenerating && k === s;
-      if (!isCurrentAndBusy) return <div className="bp-art" />;
+      const isCurrentAndBusy = (isGenerating && k === s) || isRegenThis;
+      if (isCurrentAndBusy) {
+        return (
+          <div className="bp-art lbf-loading-art">
+            <span className="story-progress-spinner" />
+            <span className="lbf-art-label">{progress.label || 'Illustrating…'}</span>
+            {genStep && <StepMeta gs={genStep} />}
+          </div>
+        );
+      }
+      // Still generating but not this page's turn yet → blank placeholder.
+      if (isGenerating) return <div className="bp-art" />;
+      // Generation over but this page has no image → it FAILED. Show why + retry.
+      const pageWarn = [...warns].reverse().find((w) => new RegExp(`scene\\s*${k}\\b`, 'i').test(w));
       return (
-        <div className="bp-art lbf-loading-art">
-          <span className="story-progress-spinner" />
-          <span className="lbf-art-label">{progress.label || 'Illustrating…'}</span>
-          {genStep && <StepMeta gs={genStep} />}
+        <div className="bp-art lbf-failed-art">
+          <div className="lbf-failed-title">⚠️ Page {k} image failed</div>
+          {pageWarn && <div className="lbf-failed-msg">{pageWarn}</div>}
+          <NoFlip className="lbf-failed-actions">
+            <button className="lbf-failed-btn" onClick={(e) => { e.stopPropagation(); void regeneratePage(k - 1); }}>↻ Try again</button>
+          </NoFlip>
         </div>
       );
     }
@@ -749,7 +834,7 @@ export function LiveBookFlip() {
       <div className="bp-art">
         <img src={`data:image/png;base64,${page.image_b64}`} alt={page.title || `Page ${k}`} draggable={false} />
         {(isDone || isRegenThis) && (
-          <div className={`lbf-regen-overlay${isRegenThis ? ' lbf-regen-busy' : ''}`}>
+          <NoFlip className={`lbf-regen-overlay${isRegenThis ? ' lbf-regen-busy' : ''}`}>
             {isRegenThis
               ? <span className="story-progress-spinner" />
               : (
@@ -765,72 +850,29 @@ export function LiveBookFlip() {
                 </>
               )
             }
-          </div>
+          </NoFlip>
         )}
       </div>
     );
   };
 
-  // ── Drag-to-turn ──────────────────────────────────────────────────────────
-  const isClosedFront = s === 0 && !turn;
-  const fwd = turn?.dir === 1;
-  const baseLeft = turn ? (fwd ? Left(s) : Left(s - 1)) : Left(s);
-  const baseRight = turn ? (fwd ? Right(s + 1) : Right(s)) : Right(s);
-  const leafFront = turn ? (fwd ? Right(s) : Right(s - 1)) : null;
-  const leafBack = turn ? (fwd ? Left(s + 1) : Left(s)) : null;
+  const density = interiorDensity(readerMode);
 
-  const leftEmpty = baseLeft == null;
-  const rightEmpty = (turn ? (fwd ? Right(s + 1) : Right(s)) : Right(s)) == null;
-
-  const onDown = (e: React.PointerEvent) => {
-    if (turn?.settling) return;
-    active.current = true;
-    startX.current = e.clientX;
-    pageW.current = (bookRef.current?.offsetWidth || 680) / 2;
-    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* */ }
-  };
-  const onMove = (e: React.PointerEvent) => {
-    if (!active.current) return;
-    const dx = e.clientX - startX.current;
-    const w = pageW.current;
-    if (dx < 0 && s < total - 1) {
-      setTurn({ dir: 1, rot: Math.max(-FOLD, (dx / w) * FOLD) });
-    } else if (dx > 0 && s > 0) {
-      setTurn({ dir: -1, rot: Math.min(0, -FOLD + (dx / w) * FOLD) });
-    } else {
-      setTurn(null);
-    }
-  };
-  const onUp = () => {
-    active.current = false;
-    setTurn((t) => {
-      if (!t) return null;
-      const prog = t.dir === 1 ? Math.abs(t.rot) / FOLD : (FOLD - Math.abs(t.rot)) / FOLD;
-      const commit = prog > THRESHOLD;
-      const target = t.dir === 1 ? (commit ? -FOLD : 0) : (commit ? 0 : -FOLD);
-      if (settleTimer.current) clearTimeout(settleTimer.current);
-      settleTimer.current = setTimeout(() => finishSettle(commit, t.dir), 420);
-      return { ...t, rot: target, settling: commit ? 'commit' : 'revert' };
-    });
-  };
-  const finishSettle = (commit: boolean, dir: 1 | -1) => {
-    if (settleTimer.current) { clearTimeout(settleTimer.current); settleTimer.current = null; }
-    if (commit) {
-      sfxPageTurn();
-      setS((v) => {
-        const next = Math.max(0, Math.min(total - 1, v + dir));
-        // SFX for last spread (The End)
-        if (next === total - 1) setTimeout(sfxStoryEnd, 350);
-        return next;
-      });
-    }
-    setTurn(null);
-  };
-  const onSettleEnd = () => { if (turn?.settling) finishSettle(turn.settling === 'commit', turn.dir); };
-  const jump = (i: number) => { if (!turn) setS(i); };
-
-  const frontShade = turn ? Math.min(0.55, Math.max(0, -turn.rot / FOLD) * 0.7) : 0;
-  const backShade = turn ? Math.min(0.55, Math.max(0, (-turn.rot - 90) / 90) * 0.45) : 0;
+  // ── Auto-advance during generation ──────────────────────────────────────────
+  // As each page's illustration arrives, physically turn the book to that page so
+  // the parent watches the story build itself. (Cover first, then each scene.)
+  const arrivedCount = pages.filter((p) => p?.image_b64).length;
+  const autoFlipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (phase !== 'generating') return;
+    if (arrivedCount <= 0) return;
+    // spread index == scene page number (1-based); clamp to the back spread.
+    const target = Math.min(arrivedCount, sceneCount);
+    // Small delay so react-pageflip has time to settle after any concurrent animation.
+    if (autoFlipTimer.current) clearTimeout(autoFlipTimer.current);
+    autoFlipTimer.current = setTimeout(() => { flipRef.current?.flipToSpread(target); }, 600);
+    return () => { if (autoFlipTimer.current) clearTimeout(autoFlipTimer.current); };
+  }, [arrivedCount, phase, sceneCount]);
 
   if (!story) return null;
 
@@ -865,13 +907,21 @@ export function LiveBookFlip() {
       )}
 
       {/* S19 — Art Director suggestion bubble */}
-      {artSuggestion && !restyleBusy && (
-        <div className="lbf-art-bubble">
-          <div className="lbf-art-bubble-head">
-            <span className="lbf-art-bubble-icon">🎨</span>
-            <strong>AI Art Director suggests:</strong>
-            <button className="lbf-art-bubble-close" onClick={() => setArtSuggestion(null)}>✕</button>
+      <ModalView
+        open={!!artSuggestion && !restyleBusy}
+        onClose={() => setArtSuggestion(null)}
+        title="🎨 AI Art Director suggests"
+        size="sm"
+        headerColor="var(--story-accent-3)"
+        headerGradient
+        footerRight={artSuggestion && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <ButtonView size="md" variant="secondary" onClick={() => { setArtSuggestion(null); setShowStylePanel(true); }}>Pick manually</ButtonView>
+            <ButtonView size="md" accentColor="var(--story-accent-3)" onClick={() => void applyStyle(artSuggestion.suggestedStyleId)}>✨ Apply this style</ButtonView>
           </div>
+        )}
+      >
+        {artSuggestion && (
           <div className="lbf-art-bubble-body">
             <div className="lbf-art-bubble-style">
               {STYLE_PRESETS.find((p) => p.id === artSuggestion.suggestedStyleId)?.label ?? artSuggestion.suggestedStyleId}
@@ -880,66 +930,28 @@ export function LiveBookFlip() {
             </div>
             <div className="lbf-art-bubble-reason">{artSuggestion.reasoning}</div>
           </div>
-          <div className="lbf-art-bubble-actions">
-            <button className="lbf-art-apply-btn" onClick={() => void applyStyle(artSuggestion.suggestedStyleId)}>
-              ✨ Apply this style
-            </button>
-            <button className="lbf-art-apply-btn lbf-art-apply-alt" onClick={() => setShowStylePanel(true)}>
-              Pick manually
-            </button>
-          </div>
-        </div>
-      )}
+        )}
+      </ModalView>
 
       <div className="bf-stage lbf-stage">
-        <div
-          className={`bp-book${isClosedFront ? ' bp-closed-front' : ''}`}
-          ref={bookRef}
-          onPointerDown={onDown}
-          onPointerMove={onMove}
-          onPointerUp={onUp}
-          onPointerCancel={onUp}
+        <FlipBook
+          ref={flipRef}
+          key={`live-${storyId ?? 'gen'}-${sceneCount}-${readerMode}`}
+          pageCount={sceneCount}
+          hint={isGenerating ? '📖 Generating your storybook…' : '← drag the right page to turn →'}
+          onSpreadChange={(sp) => {
+            sfxPageTurn();
+            if (sp === total - 1) setTimeout(sfxStoryEnd, 350);
+            setS(sp);
+          }}
         >
-          <div className={`bp-page bp-left${leftEmpty ? ' bp-empty' : ''}`}>
-            {baseLeft}
-            {!leftEmpty && <span className="bp-gutter bp-gutter-r" />}
-          </div>
-
-          <div className={`bp-page bp-right${rightEmpty ? ' bp-empty' : ''}`}>
-            {baseRight}
-            {!rightEmpty && !isClosedFront && <span className="bp-gutter bp-gutter-l" />}
-          </div>
-
-          {turn && (
-            <div
-              className="bp-leaf"
-              style={{ transform: `rotateY(${turn.rot}deg)`, transition: turn.settling ? 'transform .36s cubic-bezier(.4,0,.35,1)' : 'none' }}
-              onTransitionEnd={onSettleEnd}
-            >
-              <div className="bp-leaf-face bp-leaf-front">
-                {leafFront}
-                <span className="bp-gutter bp-gutter-l" />
-                <div className="bp-shade" style={{ opacity: frontShade }} />
-              </div>
-              <div className="bp-leaf-face bp-leaf-back">
-                {leafBack}
-                <span className="bp-gutter bp-gutter-r" />
-                <div className="bp-shade" style={{ opacity: backShade }} />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="bf-footer">
-          <span className="bf-hint">
-            {isGenerating ? '📖 Generating your storybook…' : '← drag the right page to turn →'}
-          </span>
-          <div className="bf-dots">
-            {Array.from({ length: total }).map((_, i) => (
-              <button key={i} className={`bf-dot${i === s ? ' on' : ''}`} onClick={() => jump(i)} aria-label={`Spread ${i}`} />
-            ))}
-          </div>
-        </div>
+          <FlipPage key="cover" className="pfb-cover-page" density="hard">{Right(0)}</FlipPage>
+          {story.scenes.flatMap((_, i) => [
+            <FlipPage key={`t${i}`} className="pfb-text-page" density={density}>{Left(i + 1)}</FlipPage>,
+            <FlipPage key={`img${i}`} className="pfb-image-page" density={density}>{Right(i + 1)}</FlipPage>,
+          ])}
+          <FlipPage key="back" className="pfb-back-page" density="hard">{Left(total - 1)}</FlipPage>
+        </FlipBook>
 
         {/* S19/S20 — Toolbar (only after story is done) */}
         {isDone && (
@@ -1022,10 +1034,16 @@ export function LiveBookFlip() {
             {/* S23 — Vocab tap mode */}
             <button
               className={`lbf-tool-btn${vocabMode ? ' lbf-tool-active' : ''}`}
-              onClick={() => setVocabMode((v) => !v)}
+              onClick={() => setVocabMode((v) => {
+                const next = !v;
+                setToolNotice(next
+                  ? { kind: 'info', text: '📚 Vocab mode ON — tap any word in the story text to look it up.' }
+                  : { kind: 'info', text: '📚 Vocab mode off.' });
+                return next;
+              })}
               title="Tap any word to look it up"
             >
-              📚 Vocab
+              📚 Vocab{vocabMode ? ' ●' : ''}
             </button>
 
             {/* S24 — Universe */}
@@ -1041,29 +1059,39 @@ export function LiveBookFlip() {
           </div>
         )}
 
-        {/* S19 — Style picker panel */}
-        {showStylePanel && (
-          <div className="lbf-style-panel">
-            <div className="lbf-style-panel-head">
-              <span>🖌 Choose Illustration Style</span>
-              <button className="lbf-style-close" onClick={() => setShowStylePanel(false)}>✕</button>
-            </div>
-            <div className="lbf-style-grid">
-              {STYLE_PRESETS.map((p) => (
-                <button
-                  key={p.id}
-                  className="lbf-style-chip"
-                  style={{ ['--style-accent' as string]: p.accent }}
-                  onClick={() => void applyStyle(p.id)}
-                  disabled={restyleBusy}
-                >
-                  <span className="lbf-style-chip-label">{p.label}</span>
-                  <span className="lbf-style-chip-desc">{p.description}</span>
-                </button>
-              ))}
-            </div>
+        {/* Tool notice — Branch / Vocab feedback so actions never fail silently */}
+        {toolNotice && (
+          <div className={`lbf-tool-notice${toolNotice.kind === 'error' ? ' is-error' : ''}`} role="status">
+            <span>{toolNotice.text}</span>
+            <button className="lbf-tool-notice-x" onClick={() => setToolNotice(null)} aria-label="Dismiss">✕</button>
           </div>
         )}
+
+        {/* S19 — Style picker panel */}
+        <ModalView
+          open={showStylePanel}
+          onClose={() => setShowStylePanel(false)}
+          title="🖌 Choose Illustration Style"
+          subtitle="Pick a style — every page re-illustrates to match."
+          size="lg"
+          headerColor="var(--story-accent-3)"
+          headerGradient
+        >
+          <div className="lbf-style-grid">
+            {STYLE_PRESETS.map((p) => (
+              <button
+                key={p.id}
+                className="lbf-style-chip"
+                style={{ ['--style-accent' as string]: p.accent }}
+                onClick={() => void applyStyle(p.id)}
+                disabled={restyleBusy}
+              >
+                <span className="lbf-style-chip-label">{p.label}</span>
+                <span className="lbf-style-chip-desc">{p.description}</span>
+              </button>
+            ))}
+          </div>
+        </ModalView>
 
         {/* S20 — Music mini-player */}
         {showMusicBar && musicUrl && (
@@ -1093,178 +1121,225 @@ export function LiveBookFlip() {
         )}
 
         {/* S22 — Language panel */}
-        {showLangPanel && (
-          <div className="lbf-lang-panel">
-            <div className="lbf-lang-head">
-              <span>🌍 Language &amp; Reading Level</span>
-              <button className="lbf-style-close" onClick={() => setShowLangPanel(false)}>✕</button>
-            </div>
-
-            <div className="lbf-lang-section">
-              <div className="lbf-lang-label">Translate to</div>
-              <div className="lbf-lang-row">
-                <select className="lbf-mood-select" value={targetLang} onChange={(e) => setTargetLang(e.target.value)}>
-                  {['Spanish','French','German','Italian','Portuguese','Japanese','Korean','Chinese','Hindi','Arabic','Dutch','Polish','Swedish','Norwegian','Russian'].map((l) => (
-                    <option key={l} value={l}>{l}</option>
-                  ))}
-                </select>
-                <button className={`lbf-tool-btn${langBusy ? ' lbf-tool-busy' : ''}`} disabled={langBusy} onClick={() => void translateStory()}>
-                  {langBusy ? <span className="story-progress-spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }} /> : null}
-                  Translate
-                </button>
-              </div>
-            </div>
-
-            <div className="lbf-lang-section">
-              <div className="lbf-lang-label">Reading level</div>
-              <div className="lbf-level-chips">
-                {(['pre-reader', 'early-reader', 'confident-reader'] as const).map((lvl) => (
-                  <button
-                    key={lvl} disabled={langBusy}
-                    className={`lbf-level-chip${readingLevel === lvl ? ' active' : ''}`}
-                    onClick={() => void adaptLevel(lvl)}
-                  >{lvl}</button>
-                ))}
-              </div>
-            </div>
-
-            <div className="lbf-lang-section">
-              <div className="lbf-lang-label">Phonics focus words</div>
-              <div className="lbf-lang-row">
-                <input
-                  className="lbf-phonics-input"
-                  placeholder="e.g. cat, the, and, see"
-                  value={phonicsWords}
-                  onChange={(e) => setPhonicsWords(e.target.value)}
-                />
-                <button className={`lbf-tool-btn${langBusy ? ' lbf-tool-busy' : ''}`} disabled={langBusy || !phonicsWords.trim()} onClick={() => void applyPhonics()}>
-                  Apply
-                </button>
-              </div>
-              {learning.phonicsMode && (
-                <button className="lbf-phonics-clear" onClick={() => learning.setPhonicsMode(false)}>✕ Clear phonics</button>
-              )}
+        <ModalView
+          open={showLangPanel}
+          onClose={() => setShowLangPanel(false)}
+          title="🌍 Language & Reading Level"
+          subtitle="Translate, adapt the reading level, or focus on phonics."
+          size="sm"
+          headerColor="var(--story-accent-3)"
+          headerGradient
+        >
+          <div className="lbf-lang-section">
+            <div className="lbf-lang-label">Translate to</div>
+            <div className="lbf-lang-row">
+              <SelectInputView
+                size="sm"
+                value={targetLang}
+                onChange={(v) => setTargetLang(v as string)}
+                options={enabledLangs.map((l) => ({ value: l.id, label: l.label }))}
+              />
+              <ButtonView size="sm" accentColor="var(--story-accent-3)" disabled={langBusy} loading={langBusy} onClick={() => void translateStory()}>
+                Translate
+              </ButtonView>
             </div>
           </div>
-        )}
 
-        {/* S23 — Quiz overlay */}
-        {showQuiz && (
-          <div className="lbf-quiz-overlay" onClick={() => setShowQuiz(false)}>
-            <div className="lbf-quiz-panel" onClick={(e) => e.stopPropagation()}>
-              <div className="lbf-quiz-head">
-                <span>🎓 Reading Check</span>
-                <button className="lbf-style-close" onClick={() => setShowQuiz(false)}>✕</button>
-              </div>
-
-              {learning.packLoading && <div className="lbf-quiz-loading"><span className="story-progress-spinner" /> Generating quiz…</div>}
-              {learning.packError && <div className="lbf-quiz-error">⚠ {learning.packError}</div>}
-
-              {learning.pack && (
-                <>
-                  {/* SEL skill badge */}
-                  <div className="lbf-sel-badge">
-                    <span className="lbf-sel-icon">💛</span>
-                    <div>
-                      <div className="lbf-sel-skill">{learning.pack.selSkill}</div>
-                      <div className="lbf-sel-desc">{learning.pack.selDescription}</div>
-                    </div>
-                  </div>
-
-                  {/* Questions */}
-                  {learning.pack.questions.map((q, qi) => (
-                    <div key={qi} className="lbf-quiz-q">
-                      <div className="lbf-quiz-q-text">{qi + 1}. {q.q}</div>
-                      <div className="lbf-quiz-opts">
-                        {q.options.map((opt, oi) => {
-                          const chosen = learning.quizAnswers[qi] === oi;
-                          const correct = learning.quizRevealed && oi === q.answer;
-                          const wrong = learning.quizRevealed && chosen && oi !== q.answer;
-                          return (
-                            <button
-                              key={oi}
-                              className={`lbf-quiz-opt${chosen ? ' chosen' : ''}${correct ? ' correct' : ''}${wrong ? ' wrong' : ''}`}
-                              onClick={() => learning.answerQuestion(qi, oi)}
-                              disabled={learning.quizRevealed}
-                            >{opt}</button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-
-                  <div className="lbf-quiz-actions">
-                    {!learning.quizRevealed
-                      ? <button className="lbf-art-apply-btn" onClick={learning.revealQuiz}>Check answers</button>
-                      : <button className="lbf-art-apply-btn lbf-art-apply-alt" onClick={() => { learning.resetQuiz(); }}>Try again</button>
-                    }
-                  </div>
-
-                  {/* Parent prompts */}
-                  <details className="lbf-parent-prompts">
-                    <summary>💬 Talk-about-it prompts for parents</summary>
-                    <ul>
-                      {learning.pack.parentPrompts.map((p, i) => <li key={i}>{p}</li>)}
-                    </ul>
-                  </details>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* S23 — Vocab card popup */}
-        {vocabWord && (
-          <div className="lbf-vocab-popup" onClick={() => setVocabWord(null)}>
-            <div className="lbf-vocab-card" onClick={(e) => e.stopPropagation()}>
-              {(() => {
-                const card = learning.vocab[vocabWord.toLowerCase()];
-                return card ? (
-                  <>
-                    <div className="lbf-vocab-word">{card.word}</div>
-                    <div className="lbf-vocab-def">{card.loading ? 'Looking up…' : card.definition}</div>
-                    <button className="lbf-vocab-close" onClick={() => setVocabWord(null)}>✕</button>
-                  </>
-                ) : null;
-              })()}
-            </div>
-          </div>
-        )}
-
-        {/* S24 — Universe panel */}
-        {showUniversePanel && (
-          <div className="lbf-quiz-overlay" onClick={() => setShowUniversePanel(false)}>
-            <div className="lbf-quiz-panel" onClick={(e) => e.stopPropagation()}>
-              <div className="lbf-quiz-head">
-                <span>🪐 Add to Universe</span>
-                <button className="lbf-style-close" onClick={() => setShowUniversePanel(false)}>✕</button>
-              </div>
-              {worlds.worlds.length === 0 && (
-                <p className="lbf-quiz-loading">No worlds yet. Create one in Settings → Universe.</p>
-              )}
-              {worlds.worlds.map((w) => (
-                <div key={w.id} className="lbf-world-row">
-                  <div className="lbf-world-name">🪐 {w.name}</div>
-                  <input
-                    type="number" min={1} className="lbf-episode-input"
-                    placeholder="Episode #"
-                    value={newEpisode}
-                    onChange={(e) => setNewEpisode(Number(e.target.value))}
-                  />
-                  <input
-                    className="lbf-phonics-input"
-                    placeholder="Short summary of this episode…"
-                    value={newSummary}
-                    onChange={(e) => setNewSummary(e.target.value)}
-                  />
-                  <button className="lbf-art-apply-btn" style={{ marginTop: 8 }} onClick={() => void linkToWorld(w.id)}>
-                    Link
-                  </button>
-                </div>
+          <div className="lbf-lang-section">
+            <div className="lbf-lang-label">Reading level</div>
+            <div className="lbf-level-chips">
+              {(['pre-reader', 'early-reader', 'confident-reader'] as const).map((lvl) => (
+                <ButtonView
+                  key={lvl} size="sm" disabled={langBusy}
+                  variant={readingLevel === lvl ? 'primary' : 'secondary'}
+                  accentColor="var(--story-accent-3)"
+                  onClick={() => void adaptLevel(lvl)}
+                >{lvl}</ButtonView>
               ))}
             </div>
           </div>
-        )}
+
+          <div className="lbf-lang-section">
+            <div className="lbf-lang-label">Phonics focus words</div>
+            <div className="lbf-lang-row">
+              <TextInputView
+                width="fw" size="sm"
+                placeholder="e.g. cat, the, and, see"
+                value={phonicsWords}
+                onChange={(e) => setPhonicsWords((e.target as HTMLInputElement).value)}
+              />
+              <ButtonView size="sm" accentColor="var(--story-accent-3)" disabled={langBusy || !phonicsWords.trim()} onClick={() => void applyPhonics()}>
+                Apply
+              </ButtonView>
+            </div>
+            {learning.phonicsMode && (
+              <ButtonView size="sm" variant="secondary" onClick={() => learning.setPhonicsMode(false)}>✕ Clear phonics</ButtonView>
+            )}
+          </div>
+        </ModalView>
+
+        {/* S23 — Reading Check (quiz) */}
+        <ModalView
+          open={showQuiz}
+          onClose={() => setShowQuiz(false)}
+          title="🎓 Reading Check"
+          subtitle="A quick comprehension quiz + a social-emotional skill."
+          size="md"
+          headerColor="var(--story-accent-3)"
+          headerGradient
+        >
+          {learning.packLoading && <div className="lbf-quiz-loading"><span className="story-progress-spinner" /> Generating quiz…</div>}
+          {learning.packError && <div className="lbf-quiz-error">⚠ {learning.packError}</div>}
+
+          {learning.pack && (
+            <>
+              {/* SEL skill badge */}
+              <div className="lbf-sel-badge">
+                <span className="lbf-sel-icon">💛</span>
+                <div>
+                  <div className="lbf-sel-skill">{learning.pack.selSkill}</div>
+                  <div className="lbf-sel-desc">{learning.pack.selDescription}</div>
+                </div>
+              </div>
+
+              {/* Questions */}
+              {learning.pack.questions.map((q, qi) => (
+                <div key={qi} className="lbf-quiz-q">
+                  <div className="lbf-quiz-q-text">{qi + 1}. {q.q}</div>
+                  <div className="lbf-quiz-opts">
+                    {q.options.map((opt, oi) => {
+                      const chosen = learning.quizAnswers[qi] === oi;
+                      const correct = learning.quizRevealed && oi === q.answer;
+                      const wrong = learning.quizRevealed && chosen && oi !== q.answer;
+                      return (
+                        <button
+                          key={oi}
+                          className={`lbf-quiz-opt${chosen ? ' chosen' : ''}${correct ? ' correct' : ''}${wrong ? ' wrong' : ''}`}
+                          onClick={() => learning.answerQuestion(qi, oi)}
+                          disabled={learning.quizRevealed}
+                        >{opt}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              <div className="lbf-quiz-actions">
+                {!learning.quizRevealed
+                  ? <ButtonView size="md" accentColor="var(--story-accent-3)" onClick={learning.revealQuiz}>Check answers</ButtonView>
+                  : <ButtonView size="md" variant="secondary" onClick={() => { learning.resetQuiz(); }}>Try again</ButtonView>
+                }
+              </div>
+
+              {/* Parent prompts */}
+              <details className="lbf-parent-prompts">
+                <summary>💬 Talk-about-it prompts for parents</summary>
+                <ul>
+                  {learning.pack.parentPrompts.map((p, i) => <li key={i}>{p}</li>)}
+                </ul>
+              </details>
+            </>
+          )}
+        </ModalView>
+
+        {/* S23 — Vocab card popup */}
+        <ModalView
+          open={!!vocabWord}
+          onClose={() => setVocabWord(null)}
+          title="📚 Vocabulary"
+          size="sm"
+          headerColor="var(--story-accent-3)"
+          headerGradient
+        >
+          {(() => {
+            const card = vocabWord ? learning.vocab[vocabWord.toLowerCase()] : null;
+            return card ? (
+              <div className="lbf-vocab-card-body">
+                <div className="lbf-vocab-word">{card.word}</div>
+                <div className="lbf-vocab-def">{card.loading ? 'Looking up…' : card.definition}</div>
+              </div>
+            ) : <div className="lbf-vocab-def">Looking up…</div>;
+          })()}
+        </ModalView>
+
+        {/* S24 — Universe panel */}
+        <ModalView
+          open={showUniversePanel}
+          onClose={() => setShowUniversePanel(false)}
+          title="🪐 Add to Universe"
+          subtitle="Link this story into a series / shared world."
+          size="sm"
+          headerColor="var(--story-accent-3)"
+          headerGradient
+          footerRight={
+            <ButtonView size="md" accentColor="var(--story-accent-3)" iconLeft={<PlusIcon size={13} />}
+              onClick={() => { setNewWorldName(''); setNewWorldDesc(''); setShowCreateWorld(true); }}>
+              New universe
+            </ButtonView>
+          }
+        >
+          {worlds.worlds.length === 0 && (
+            <p className="lbf-quiz-loading">No worlds yet — click <b>New universe</b> below to create your first one.</p>
+          )}
+          {worlds.worlds.map((w) => (
+            <div key={w.id} className="lbf-world-row">
+              <div className="lbf-world-name">🪐 {w.name}</div>
+              <TextInputView
+                width="fw" size="sm"
+                placeholder="Episode #"
+                value={String(newEpisode)}
+                onChange={(e) => setNewEpisode(Number((e.target as HTMLInputElement).value) || 1)}
+              />
+              <TextInputView
+                width="fw" size="sm"
+                placeholder="Short summary of this episode…"
+                value={newSummary}
+                onChange={(e) => setNewSummary((e.target as HTMLInputElement).value)}
+              />
+              <ButtonView size="sm" accentColor="var(--story-accent-3)" onClick={() => void linkToWorld(w.id)}>
+                Link
+              </ButtonView>
+            </div>
+          ))}
+        </ModalView>
+
+        {/* S24 — Create a new universe (nested modal, same as Settings → Universe) */}
+        <ModalView
+          open={showCreateWorld}
+          onClose={() => setShowCreateWorld(false)}
+          title="🪐 New Universe"
+          subtitle="A shared world your stories can belong to (a series)."
+          size="sm"
+          headerColor="var(--story-accent-3)"
+          headerGradient
+          footerRight={
+            <div style={{ display: 'flex', gap: 8 }}>
+              <ButtonView size="md" variant="secondary" onClick={() => setShowCreateWorld(false)}>Cancel</ButtonView>
+              <ButtonView size="md" accentColor="var(--story-accent-3)" disabled={!newWorldName.trim() || worldBusy} loading={worldBusy}
+                onClick={async () => {
+                  if (!newWorldName.trim()) return;
+                  setWorldBusy(true);
+                  try { await worlds.create(newWorldName.trim(), newWorldDesc.trim()); await worlds.load(); sfxSuccess(); setShowCreateWorld(false); }
+                  finally { setWorldBusy(false); }
+                }}>
+                Create universe
+              </ButtonView>
+            </div>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span className="lbf-lang-label">Name</span>
+              <TextInputView width="fw" size="md" placeholder="e.g. The Brave Bunny Saga"
+                value={newWorldName} onChange={(e) => setNewWorldName((e.target as HTMLInputElement).value)} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <span className="lbf-lang-label">Description <span style={{ opacity: 0.6 }}>(optional)</span></span>
+              <TextInputView width="fw" size="md" placeholder="What ties these stories together?"
+                value={newWorldDesc} onChange={(e) => setNewWorldDesc((e.target as HTMLInputElement).value)} />
+            </div>
+          </div>
+        </ModalView>
       </div>
 
       {/* S21 — Branch map modal */}

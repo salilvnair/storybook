@@ -91,6 +91,22 @@ export function storyFile(id, name) {
   return fs.existsSync(file) ? file : null;
 }
 
+/**
+ * Persist an edited image back into a saved story (S-E5).
+ * @param {string} id  story id
+ * @param {'cover'|number|string} slot  'cover' or a 1-based page number
+ * @param {string} b64  base64 PNG (no data: prefix)
+ * @returns {{ ok:boolean, file?:string }}
+ */
+export function saveStoryImage(id, slot, b64) {
+  const dir = dirFor(id);
+  if (!b64 || !fs.existsSync(dir)) return { ok: false };
+  const name = slot === 'cover' ? 'cover.png' : `page-${parseInt(slot, 10)}.png`;
+  if (slot !== 'cover' && !Number.isFinite(parseInt(slot, 10))) return { ok: false };
+  const written = writePng(dir, name, b64);
+  return written ? { ok: true, file: written } : { ok: false };
+}
+
 export function removeStory(id) {
   try { fs.rmSync(dirFor(id), { recursive: true, force: true }); return true; } catch { return false; }
 }

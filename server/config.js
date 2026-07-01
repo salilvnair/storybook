@@ -62,3 +62,38 @@ export function isLlmConfigured() {
 export function isRunpodConfigured() {
   return Boolean(config.runpod.url && !config.runpod.url.includes('REPLACE'));
 }
+
+/** OpenAI API key. Priority: env var → OS keychain → ui fallback. */
+export async function getOpenAiImageKey(uiFallback = '') {
+  const env = process.env.OPENAI_API_KEY || '';
+  if (env) return env;
+  if ((process.env.LLM_TYPE || 'openai').toLowerCase() === 'openai') {
+    const llm = process.env.LLM_API_KEY || '';
+    if (llm) return llm;
+  }
+  const { getKey } = await import('./services/keychain.js');
+  return (await getKey('openai-api-key')) || uiFallback || '';
+}
+
+/** OpenRouter API key. Priority: env var → OS keychain → ui fallback. */
+export async function getOpenRouterKey(uiFallback = '') {
+  const env = process.env.OPENROUTER_API_KEY || '';
+  if (env) return env;
+  const { getKey } = await import('./services/keychain.js');
+  return (await getKey('openrouter-api-key')) || uiFallback || '';
+}
+
+/** Store an API key in the OS keychain (called from settings save endpoint). */
+export async function saveApiKey(account, secret) {
+  const { setKey, deleteKey } = await import('./services/keychain.js');
+  if (!secret || secret === '••••••••') return;
+  if (secret === '') { await deleteKey(account); return; }
+  await setKey(account, secret);
+}
+
+/** Returns true if a key is available (env var or keychain). Never returns the key itself. */
+export async function hasApiKey(account, envVar) {
+  if (envVar && process.env[envVar]) return true;
+  const { hasKey } = await import('./services/keychain.js');
+  return hasKey(account);
+}

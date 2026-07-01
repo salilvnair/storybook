@@ -7,29 +7,33 @@
 import { useEffect } from 'react';
 import { SelectInputView, TextInputView, ChipView, type SelectOption } from '@salilvnair/dui';
 import { useAudioEngineStore } from '../../store/audio-engine-store';
+import { useVoicesStore } from '../../store/voices-store';
 import { SaveButton } from '../SaveButton';
+import { SettingsPanelHeader } from './SettingsPanelHeader';
 
 export function AudioEngineSettings() {
   const { engines, config, loaded, init, setEngine, setUrl, setOption, save, current } = useAudioEngineStore();
 
   useEffect(() => { if (!loaded) void init(); }, [loaded, init]);
 
+  const { voices, loaded: voicesLoaded, load: loadVoices } = useVoicesStore();
+  useEffect(() => { if (!voicesLoaded) void loadVoices(); }, [voicesLoaded, loadVoices]);
+
   const eng = current();
   const opts = eng?.options;
   const engineOptions: SelectOption[] = engines.map((e) => ({ value: e.id, label: e.label }));
+  const cloned = voices.filter((v) => !eng || v.engineId === config.engine);
   const voiceOptions: SelectOption[] = [
     { value: '', label: 'Engine default' },
     ...(eng?.voices || []).map((v) => ({ value: v, label: v })),
+    ...(cloned.length > 0 ? [{ value: '__cloned__', label: 'Cloned voices', isHeader: true } as SelectOption] : []),
+    ...cloned.map((v) => ({ value: v.cloneVoiceId, label: `⭐ ${v.label}` })),
   ];
   const formatOptions: SelectOption[] = (eng?.formats || ['wav']).map((f) => ({ value: f, label: f.toUpperCase() }));
 
   return (
-    <div className="bs-settings-pane bs-custom-provider-pane ie-pane">
-      <div className="bs-settings-section-head">
-        <span style={{ fontSize: 15 }}>🔊</span>
-        <h3 className="bs-settings-h3">Audio (TTS) Engine</h3>
-        {eng && <ChipView size="sm" color={eng.accent} label={eng.label} />}
-      </div>
+    <div className="bs-settings-pane ie-pane">
+      <SettingsPanelHeader icon="🔊" title="Voice Engine" subtitle="Configure your TTS server for read-aloud narration." action={eng && <ChipView size="sm" color={eng.accent} label={eng.label} />} />
 
       {/* Engine picker */}
       <label className="bs-custom-provider-label bs-span2 ie-field" style={{ maxWidth: 420 }}>
@@ -105,6 +109,7 @@ export function AudioEngineSettings() {
                 size="sm"
                 type="number"
                 placeholder="1.0"
+                style={{ width: 72 }}
                 onChange={(e) => setOption('speed', parseFloat((e.target as HTMLInputElement).value) || 1.0)}
               />
             </label>

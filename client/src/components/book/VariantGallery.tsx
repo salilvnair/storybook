@@ -4,6 +4,7 @@
  * "Generate variant" regenerates the page and stores the result as a variant.
  * Clicking a thumbnail applies it as the active page image.
  */
+import { ModalView, ButtonView } from '@salilvnair/dui';
 import { usePageDesignStore } from '../../store/page-design-store';
 import { useStoryStore } from '../../store/story-store';
 import { usePrefsStore } from '../../store/prefs-store';
@@ -57,13 +58,30 @@ export function VariantGallery({ storyId, pageIdx, currentImage, onClose }: Prop
   const allVariants = [currentImage, ...variants].filter(Boolean).filter((v, i, arr) => arr.indexOf(v) === i).slice(0, maxVariants);
 
   return (
-    <div className="vg-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="vg-panel">
-        <div className="vg-header">
-          <span>🖼 Image Variants — Page {pageIdx === 0 ? 'Cover' : pageIdx}</span>
-          <button className="pd-hdr-close" onClick={onClose}>✕</button>
+    <ModalView
+      open
+      onClose={onClose}
+      title={`🖼 Image Variants — Page ${pageIdx === 0 ? 'Cover' : pageIdx}`}
+      subtitle="Click a variant to set it as the active image."
+      size="md"
+      headerColor="var(--story-accent-3)"
+      headerGradient
+      footerRight={
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {allVariants.length >= maxVariants && (
+            <ButtonView size="md" variant="secondary" onClick={() => store.clearVariants(storyId, pageIdx)}>Clear all</ButtonView>
+          )}
+          <ButtonView
+            size="md" accentColor="var(--story-accent-3)"
+            disabled={isRegen || allVariants.length >= maxVariants}
+            loading={isRegen}
+            onClick={() => void generateVariant()}
+          >
+            {allVariants.length >= maxVariants ? `${maxVariants} / ${maxVariants} variants` : '✨ Generate variant'}
+          </ButtonView>
         </div>
-
+      }
+    >
         <div className="vg-grid">
           {Array.from({ length: maxVariants }).map((_, i) => {
             const img = allVariants[i];
@@ -83,22 +101,6 @@ export function VariantGallery({ storyId, pageIdx, currentImage, onClose }: Prop
           })}
         </div>
 
-        <div className="vg-actions">
-          <button
-            className={`pd-hdr-btn${isRegen ? ' pd-hdr-busy' : ''}`}
-            disabled={isRegen || allVariants.length >= maxVariants}
-            onClick={() => void generateVariant()}
-          >
-            {isRegen ? (
-              <><span className="story-progress-spinner" style={{ width: 10, height: 10, borderWidth: 1.5 }} /> Generating…</>
-            ) : allVariants.length >= maxVariants ? `${maxVariants} / ${maxVariants} variants` : '✨ Generate variant'}
-          </button>
-          {allVariants.length >= maxVariants && (
-            <button className="pd-hdr-btn" onClick={() => store.clearVariants(storyId, pageIdx)}>Clear all</button>
-          )}
-          <span className="vg-hint">Click a variant to set it as active image</span>
-        </div>
-      </div>
-    </div>
+    </ModalView>
   );
 }

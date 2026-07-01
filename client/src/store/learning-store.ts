@@ -57,11 +57,22 @@ export const useLearningStore = create<LearningState>((set, get) => ({
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ story }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        // Surface the REAL reason: parse the server's { error } body, include status.
+        const body = await res.text().catch(() => '');
+        let detail = body;
+        try { const j = JSON.parse(body); detail = j.error || body; } catch { /* not JSON */ }
+        throw new Error(
+          detail
+            ? `Quiz generation failed (HTTP ${res.status}): ${detail}`
+            : `Quiz generation failed (HTTP ${res.status}). The chat/LLM engine may not be configured — check Settings → Chat Engine.`,
+        );
+      }
       const data = await res.json() as LearningPack & { ok: boolean };
       set({ pack: { questions: data.questions, selSkill: data.selSkill, selDescription: data.selDescription, parentPrompts: data.parentPrompts }, packLoading: false });
     } catch (err) {
-      set({ packError: String(err), packLoading: false });
+      const msg = err instanceof Error ? err.message : String(err);
+      set({ packError: msg || 'Unknown error generating the quiz.', packLoading: false });
     }
   },
 

@@ -5,6 +5,7 @@
  * Undo/redo via local history stack.
  */
 import React, { useRef, useState, useCallback, useEffect, type PointerEvent as RPE } from 'react';
+import { ModalView, ButtonView } from '@salilvnair/dui';
 import { usePageDesignStore, type PageElement, type ElementType, type BubbleTail } from '../../store/page-design-store';
 import { useBrandKitStore, FONT_OPTIONS } from '../../store/brandkit-store';
 
@@ -381,19 +382,24 @@ export function PageDesigner({ storyId, pageIdx, imageSrc, onClose }: Props) {
   };
 
   return (
-    <div className="pd-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="pd-modal">
-        {/* Header */}
-        <div className="pd-header">
-          <div className="pd-title">✏️ Page Designer — Page {pageIdx === 0 ? 'Cover' : pageIdx}</div>
-          <div className="pd-header-actions">
-            <button className="pd-hdr-btn" onClick={undo} disabled={histIdx <= 0} title="Undo (⌘Z)">↩ Undo</button>
-            <button className="pd-hdr-btn" onClick={redo} disabled={histIdx >= history.length - 1} title="Redo (⌘Y)">↪ Redo</button>
-            <button className="pd-hdr-btn pd-hdr-clear" onClick={() => { store.clearPage(storyId, pageIdx); setHistory([[]]); setHistIdx(0); setSelectedId(null); }}>Clear</button>
-            <button className="pd-hdr-close" onClick={onClose}>✕ Done</button>
-          </div>
+    <ModalView
+      open
+      onClose={onClose}
+      title={`✏️ Page Designer — Page ${pageIdx === 0 ? 'Cover' : pageIdx}`}
+      subtitle="Add text, speech bubbles, shapes & stickers over the illustration."
+      size="xl"
+      headerColor="var(--story-accent-3)"
+      headerGradient
+      footerLeft={
+        <div style={{ display: 'flex', gap: 8 }}>
+          <ButtonView size="md" variant="secondary" disabled={histIdx <= 0} onClick={undo}>↩ Undo</ButtonView>
+          <ButtonView size="md" variant="secondary" disabled={histIdx >= history.length - 1} onClick={redo}>↪ Redo</ButtonView>
+          <ButtonView size="md" variant="secondary" accentColor="#f87171"
+            onClick={() => { store.clearPage(storyId, pageIdx); setHistory([[]]); setHistIdx(0); setSelectedId(null); }}>Clear</ButtonView>
         </div>
-
+      }
+      footerRight={<ButtonView size="md" accentColor="var(--story-accent-3)" onClick={onClose}>Done</ButtonView>}
+    >
         <div className="pd-body">
           {/* Left: element palette */}
           <div className="pd-palette">
@@ -431,7 +437,6 @@ export function PageDesigner({ storyId, pageIdx, imageSrc, onClose }: Props) {
             {[...elements].sort((a, b) => a.z - b.z).map(renderElement)}
           </div>
         </div>
-      </div>
-    </div>
+    </ModalView>
   );
 }

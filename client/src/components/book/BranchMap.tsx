@@ -2,6 +2,7 @@
  * BranchMap — S21. A simple SVG tree diagram showing the branching structure.
  * Scenes are nodes; choices are directed edges.
  */
+import { ModalView } from '@salilvnair/dui';
 import type { Scene } from '../../store/story-store';
 
 interface Props {
@@ -83,13 +84,16 @@ export function BranchMap({ scenes, currentIndex, visitedIndices, onJump, onClos
   }
 
   return (
-    <div className="bmap-overlay" onClick={onClose}>
-      <div className="bmap-panel" onClick={(e) => e.stopPropagation()}>
-        <div className="bmap-head">
-          <span>🌳 Branch Map</span>
-          <button className="bmap-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="bmap-scroll">
+    <ModalView
+      open
+      onClose={onClose}
+      title="🌳 Branch Map"
+      subtitle="Click any node to jump to that scene."
+      size="lg"
+      headerColor="var(--story-accent-3)"
+      headerGradient
+    >
+      <div className="bmap-scroll">
           <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="bmap-svg">
             <defs>
               <marker id="bm-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
@@ -137,8 +141,6 @@ export function BranchMap({ scenes, currentIndex, visitedIndices, onJump, onClos
             })}
           </svg>
         </div>
-        <p className="bmap-hint">Click any node to jump to that scene.</p>
-      </div>
-    </div>
+    </ModalView>
   );
 }

@@ -13,12 +13,14 @@ import { Router } from 'express';
 import { buildFromTemplate } from '../services/pdf-from-template.js';
 import { SAMPLE_STORY, SAMPLE_COVER, SAMPLE_SCENE_IMAGES } from '../services/sample-image.js';
 import { specFromDescription } from '../services/templateAgent.js';
+import { startThinking } from '../store/sse-bus.js';
 
 export function templateRouter() {
   const router = Router();
 
   router.post('/api/template/message', async (req, res) => {
-    const { message, inputParams } = req.body || {};
+    const { message, inputParams, conversationId } = req.body || {};
+    const id = conversationId || 'template-prompt';
     const action = inputParams?.action || '';
     const text = String(message || '').trim();
     const lower = text.toLowerCase();
@@ -28,10 +30,13 @@ export function templateRouter() {
 
     // Mode C — a PDF was uploaded → infer a spec from its name/cue via the LLM.
     if (action === 'imported') {
+      const stop = startThinking(id, ['📄 Reading the PDF…', '🔍 Detecting the layout…', '🎨 Matching the palette…', '📐 Building the template…']);
       try {
         const spec = await specFromDescription(`A children's picture book similar to "${inputParams?.fileName || 'a classic board book'}". Infer a warm, typical board-book spread layout.`);
+        stop();
         return controls(`Read **${inputParams?.fileName || 'your PDF'}** and built a matching template. Tweak anything below — the preview updates live.`, spec || undefined);
       } catch {
+        stop();
         return controls(`Read **${inputParams?.fileName || 'your PDF'}**. Here's a starting template — tweak it below.`);
       }
     }
@@ -47,10 +52,12 @@ export function templateRouter() {
     // Mode B — a freeform description (not a command word) → infer a spec via the LLM.
     const isCommand = action === 'start' || /^(open|edit|the )?(layout|editor|design|start|begin|template)\b/.test(lower) || lower.length < 4;
     if (!isCommand && text) {
+      const stop = startThinking(id, ['🧠 Reading your description…', '🎨 Choosing a palette…', '📐 Laying out the page…', '📦 Building the template…']);
       try {
         const spec = await specFromDescription(text);
+        stop();
         if (spec) return controls('Done — I built a layout from your description. Tweak it below, then **Generate sample**.', spec);
-      } catch { /* fall through to default */ }
+      } catch { stop(); /* fall through to default */ }
     }
 
     const wantsStart = action === 'start' || /editor|design|layout|start|begin|template/.test(lower);

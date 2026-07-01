@@ -1,88 +1,31 @@
 /**
- * PageFlipBook — realistic page-curl reader using react-pageflip / StPageFlip.
- * Used in Library when Settings > Library Config > Reader mode = "Page Flip".
+ * PageFlipBook — the Library saved-story reader. Thin wrapper over the shared
+ * FlipBook (react-pageflip). Reader mode ('pageflip' curl | 'classic' 3D) only
+ * changes the interior page density; cover & back are always rigid.
  *
- * Page order passed to HTMLFlipBook (each child = one page):
- *   [0] Front cover         — hard, full art
- *   [1] Scene 1 text        — left page
- *   [2] Scene 1 image       — right page
- *   ...
- *   [2N-1] Scene N text
- *   [2N]   Scene N image
- *   [2N+1] Back cover       — hard, "The End"
- *
- * showCover=true makes [0] and [last] display as single pages (hard covers).
+ * S-E5 — each illustration (cover + page images) carries a 🖌 Edit button that
+ * opens the shared AIEditPanel; applied edits are persisted via
+ * POST /api/stories/:id/image and the <img> is cache-busted so the swap shows live.
  */
-import React, { useEffect, useRef, useState } from 'react';
-import HTMLFlipBook from 'react-pageflip';
+import { useEffect, useState } from 'react';
 import { usePrefsStore } from '../../store/prefs-store';
+import { FlipBook, FlipPage, interiorDensity } from './FlipBook';
+import { AIEditPanel } from '../edit/AIEditPanel';
 
-interface Scene { title?: string; narration?: string; says?: string; thinks?: string }
+interface Scene { title?: string; narration?: string; says?: string; thinks?: string; image_prompt?: string }
 interface Props { storyId: string; pageCount: number; title: string }
 
-const TextPage = React.forwardRef<HTMLDivElement, { num: number; sc?: Scene }>(({ num, sc }, ref) => (
-  <div className="pfb-page pfb-text-page" ref={ref}>
-    <div className="pfb-inner">
-      <div className="bp-num">Page {num}</div>
-      <div className="bp-stitle">{sc?.title}</div>
-      <p className="bp-narr">{sc?.narration}</p>
-      {sc?.says && <div className="bp-bubble bp-says">💬 &ldquo;{sc.says}&rdquo;</div>}
-      {sc?.thinks && <div className="bp-bubble bp-thinks">💭 {sc.thinks}</div>}
-    </div>
-    <div className="pfb-page-num">{num}</div>
-  </div>
-));
-TextPage.displayName = 'TextPage';
-
-const ImagePage = React.forwardRef<HTMLDivElement, { src: string; alt: string }>(({ src, alt }, ref) => (
-  <div className="pfb-page pfb-image-page" ref={ref}>
-    <img src={src} alt={alt} draggable={false}
-      onError={(e) => { e.currentTarget.style.opacity = '0'; }} />
-  </div>
-));
-ImagePage.displayName = 'ImagePage';
-
-const CoverPage = React.forwardRef<HTMLDivElement, { src: string; title: string }>(({ src, title }, ref) => (
-  <div className="pfb-page pfb-cover-page" ref={ref}>
-    <img src={src} alt={title} draggable={false}
-      onError={(e) => { e.currentTarget.style.opacity = '0'; }} />
-    <div className="pfb-cover-title">{title}</div>
-  </div>
-));
-CoverPage.displayName = 'CoverPage';
-
-const BackPage = React.forwardRef<HTMLDivElement, { title: string }>(({ title }, ref) => (
-  <div className="pfb-page pfb-back-page" ref={ref}>
-    <div className="pfb-back-inner">
-      <div className="bp-bc-end">The End</div>
-      <div className="bp-bc-title">{title}</div>
-      <div className="bp-bc-mark">📖 iStorybook</div>
-    </div>
-  </div>
-));
-BackPage.displayName = 'BackPage';
+/** 'cover' or a 1-based page number. */
+type Slot = 'cover' | number;
 
 export function PageFlipBook({ storyId, pageCount, title }: Props) {
   const [scenes, setScenes] = useState<Scene[]>([]);
-  const [spread, setSpread] = useState(0);
-  const bookRef = useRef<InstanceType<typeof HTMLFlipBook>>(null);
-  const flipShadow = usePrefsStore((s) => s.prefs.flipShadow);
-  const flipSpeed = usePrefsStore((s) => s.prefs.flipSpeed);
-  const showCover = usePrefsStore((s) => s.prefs.showCover);
+  const readerMode = usePrefsStore((s) => s.prefs.readerMode);
+  const density = interiorDensity(readerMode);
 
-  const totalPages = 2 + 2 * pageCount;       // cover + N*(text+img) + back
-  const totalSpreads = pageCount + 2;          // cover spread + N scene spreads + back spread
-
-  const handleFlip = () => {
-    const p = bookRef.current?.pageFlip().getCurrentPageIndex() ?? 0;
-    const s = p === 0 ? 0 : p >= totalPages - 1 ? totalSpreads - 1 : Math.ceil(p / 2);
-    setSpread(s);
-  };
-
-  const jumpToSpread = (d: number) => {
-    const page = d === 0 ? 0 : d >= totalSpreads - 1 ? totalPages - 1 : 2 * d - 1;
-    bookRef.current?.pageFlip().flip(page, 'bottom');
-  };
+  // S-E5 — AI edit overlay: which slot is being edited + a per-slot cache-buster.
+  const [editing, setEditing] = useState<Slot | null>(null);
+  const [vers, setVers] = useState<Record<string, number>>({});
 
   useEffect(() => {
     fetch(`/api/stories/${storyId}`)
@@ -91,53 +34,83 @@ export function PageFlipBook({ storyId, pageCount, title }: Props) {
       .catch(() => {});
   }, [storyId]);
 
-  // Match BookFlip dimensions: min(88vw,760px) wide × min(56vh,440px) tall → per-page 380×440
-  const PAGE_W = 380;
-  const PAGE_H = 440;
+  const slotKey = (s: Slot) => (s === 'cover' ? 'cover' : `page-${s}`);
+  const srcFor = (s: Slot) => {
+    const base = s === 'cover' ? `/api/stories/${storyId}/cover` : `/api/stories/${storyId}/page/${s}`;
+    const v = vers[slotKey(s)];
+    return v ? `${base}?v=${v}` : base;
+  };
+  const promptFor = (s: Slot) =>
+    s === 'cover' ? scenes[0]?.image_prompt || title : scenes[s - 1]?.image_prompt || scenes[s - 1]?.narration || '';
+
+  const persist = async (b64: string) => {
+    if (editing == null) return;
+    const slot = editing;
+    try {
+      const res = await fetch(`/api/stories/${storyId}/image`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slot: slot === 'cover' ? 'cover' : slot, image_b64: b64 }),
+      });
+      if (res.ok) setVers((v) => ({ ...v, [slotKey(slot)]: Date.now() }));
+    } catch { /* keep the old image */ }
+  };
 
   return (
-    <div className="pfb-root">
-      {/* @ts-expect-error react-pageflip uses loose prop types */}
-      <HTMLFlipBook
-        ref={bookRef}
-        width={PAGE_W}
-        height={PAGE_H}
-        size="fixed"
-        showCover={showCover}
-        drawShadow={flipShadow}
-        flippingTime={flipSpeed}
-        usePortrait={false}
-        startZIndex={0}
-        maxShadowOpacity={0.5}
-        mobileScrollSupport
-        onFlip={handleFlip}
-        className="pfb-book"
-      >
-        {/* [0] Front cover */}
-        <CoverPage src={`/api/stories/${storyId}/cover`} title={title} />
+    <div className="bf-stage">
+      <FlipBook key={`${storyId}-${readerMode}`} pageCount={pageCount}>
+        <FlipPage className="pfb-cover-page" density="hard">
+          <div className="bp-art">
+            <img src={srcFor('cover')} alt={title} draggable={false}
+              onError={(e) => { e.currentTarget.style.opacity = '0'; }} />
+            <div className="pfb-cover-title">{title}</div>
+            <button className="bp-edit-btn" title="AI edit this image"
+              onClick={(e) => { e.stopPropagation(); setEditing('cover'); }}>🖌️ Edit</button>
+          </div>
+        </FlipPage>
 
-        {/* [1..2N] Scene pages (text, image alternating) */}
         {Array.from({ length: pageCount }).flatMap((_, i) => [
-          <TextPage key={`text-${i}`} num={i + 1} sc={scenes[i]} />,
-          <ImagePage
-            key={`img-${i}`}
-            src={`/api/stories/${storyId}/page/${i + 1}`}
-            alt={scenes[i]?.title || `Page ${i + 1}`}
-          />,
+          <FlipPage key={`text-${i}`} className="pfb-text-page" density={density}>
+            <div className="bp-text">
+              <div className="bp-num">Page {i + 1}</div>
+              <div className="bp-stitle">{scenes[i]?.title}</div>
+              <p className="bp-narr">{scenes[i]?.narration}</p>
+              {scenes[i]?.says && <div className="bp-bubble bp-says">💬 &ldquo;{scenes[i]?.says}&rdquo;</div>}
+              {scenes[i]?.thinks && <div className="bp-bubble bp-thinks">💭 {scenes[i]?.thinks}</div>}
+            </div>
+          </FlipPage>,
+          <FlipPage key={`img-${i}`} className="pfb-image-page" density={density}>
+            <div className="bp-art">
+              <img src={srcFor(i + 1)} alt={scenes[i]?.title || `Page ${i + 1}`} draggable={false}
+                onError={(e) => { e.currentTarget.style.opacity = '0'; }} />
+              <button className="bp-edit-btn" title="AI edit this image"
+                onClick={(e) => { e.stopPropagation(); setEditing(i + 1); }}>🖌️ Edit</button>
+            </div>
+          </FlipPage>,
         ])}
 
-        {/* [last] Back cover */}
-        <BackPage title={title} />
-      </HTMLFlipBook>
+        <FlipPage className="pfb-back-page" density="hard">
+          <div className="bp-backcover">
+            <div className="bp-bc-end">The End</div>
+            <div className="bp-bc-title">{title}</div>
+            <div className="bp-bc-mark">📖 iStorybook</div>
+          </div>
+        </FlipPage>
+      </FlipBook>
 
-      <div className="bf-footer">
-        <span className="bf-hint">← drag the right page to turn →</span>
-        <div className="bf-dots">
-          {Array.from({ length: totalSpreads }).map((_, d) => (
-            <button key={d} className={`bf-dot${spread === d ? ' on' : ''}`} onClick={() => jumpToSpread(d)} aria-label={`Go to spread ${d}`} />
-          ))}
+      {editing != null && (
+        <div className="bp-edit-overlay" onClick={() => setEditing(null)}>
+          <div className="bp-edit-modal" onClick={(e) => e.stopPropagation()}>
+            <AIEditPanel
+              key={slotKey(editing)}
+              imageSrc={srcFor(editing)}
+              currentPrompt={promptFor(editing)}
+              title={editing === 'cover' ? 'AI Edit — cover' : `AI Edit — page ${editing}`}
+              onApply={(b64) => void persist(b64)}
+              onClose={() => setEditing(null)}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

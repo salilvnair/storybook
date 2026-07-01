@@ -20,6 +20,11 @@
  *   experiments/{mflux,cuda}-flux2/api_server.py      (flux2)
  */
 import { recordAiCall } from '../../store/aiAudit.js';
+import { getOpenAiImageKey, getOpenRouterKey } from '../../config.js';
+import { generateGptImage } from './gpt-image-gen.js';
+import { generateOpenRouterImage, OPENROUTER_IMAGE_MODELS, OPENROUTER_DEFAULT_MODEL } from './openrouter-image.js';
+
+export const DIRECT_GEN_ENGINES = new Set(['gpt-image', 'openrouter']);
 
 /** @typedef {{ prompt:string, aspect_ratio?:string, seed?:number,
  *   magic?:boolean, steps?:number, preset?:string, negativePrompt?:string }} GenOpts */
@@ -93,6 +98,36 @@ export const ENGINES = {
       };
     },
   },
+
+  'gpt-image': {
+    id: 'gpt-image',
+    label: 'GPT Image (OpenAI)',
+    model: 'gpt-image-2',
+    blurb: 'OpenAI GPT Image — cloud-based, no GPU, no local server required. Supports chatgpt-image-latest, gpt-image-2, and all current OpenAI image models. Uses your configured OPENAI_API_KEY (or LLM_API_KEY when LLM_TYPE=openai).',
+    accent: '#10b981',
+    direct: true,
+    noUrl: true,
+    options: { magic: false, preset: false, negativePrompt: false, steps: false, model: true },
+    models: ['chatgpt-image-latest', 'gpt-image-1', 'gpt-image-1-mini', 'gpt-image-1.5', 'gpt-image-2', 'gpt-image-2-2026-04-21'],
+    buildBody(o) {
+      return { model: o.model || 'gpt-image-2', prompt: o.prompt };
+    },
+  },
+
+  openrouter: {
+    id: 'openrouter',
+    label: 'OpenRouter Image',
+    model: OPENROUTER_DEFAULT_MODEL,
+    blurb: 'OpenRouter Unified Image API — 30+ image models from Google (Gemini/Nano Banana), Black Forest Labs (FLUX.2), ByteDance (Seedream), OpenAI, xAI, and more. One API key, automatic model routing. Requires OPENROUTER_API_KEY.',
+    accent: '#7c3aed',
+    direct: true,
+    noUrl: true,
+    options: { magic: false, preset: false, negativePrompt: false, steps: false, model: true },
+    models: OPENROUTER_IMAGE_MODELS,
+    buildBody(o) {
+      return { model: o.model || OPENROUTER_DEFAULT_MODEL, prompt: o.prompt };
+    },
+  },
 };
 
 export const DEFAULT_ENGINE = 'ideogram4';
@@ -105,7 +140,7 @@ export function getEngine(id) {
 export function engineList() {
   return Object.values(ENGINES).map((e) => ({
     id: e.id, label: e.label, blurb: e.blurb, accent: e.accent, options: e.options, presets: e.presets,
-    models: e.models || [],
+    model: e.model || '', models: e.models || [], direct: e.direct || false, noUrl: e.noUrl || false,
   }));
 }
 
@@ -153,6 +188,8 @@ export async function ensureLoaded(url) {
  */
 export async function generateStream(engineId, url, prompt, opts = {}, onStep = null) {
   const engine = getEngine(engineId);
+  // Direct engines don't support streaming — fall back to non-streaming
+  if (engine.direct) return generate(engineId, url, prompt, opts);
   const base = cleanUrl(url);
   const seedRaw = opts.seed != null && opts.seed !== '' ? parseInt(String(opts.seed), 10) : undefined;
   const seed = seedRaw != null && !Number.isNaN(seedRaw) ? seedRaw : undefined;
@@ -212,6 +249,20 @@ export async function generateStream(engineId, url, prompt, opts = {}, onStep = 
  */
 export async function generate(engineId, url, prompt, opts = {}) {
   const engine = getEngine(engineId);
+
+  // Direct engines call external APIs — no local server URL needed.
+  if (engine.direct) {
+    if (engineId === 'openrouter') {
+      const apiKey = await getOpenRouterKey(url);
+      const model = opts.model || engine.model || OPENROUTER_DEFAULT_MODEL;
+      return generateOpenRouterImage({ ...opts, prompt, model }, apiKey);
+    }
+    // gpt-image and future OpenAI direct engines
+    const apiKey = await getOpenAiImageKey(url);
+    const model = opts.model || engine.model || 'gpt-image-2';
+    return generateGptImage({ ...opts, prompt, model }, apiKey);
+  }
+
   const base = cleanUrl(url);
   const seedRaw = opts.seed != null && opts.seed !== '' ? parseInt(String(opts.seed), 10) : undefined;
   const seed = seedRaw != null && !Number.isNaN(seedRaw) ? seedRaw : undefined;

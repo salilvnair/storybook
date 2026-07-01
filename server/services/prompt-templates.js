@@ -102,6 +102,16 @@ export const DEFAULT_VOCAB_PROMPT =
   "Return ONLY valid JSON:\n" +
   "{\"word\": \"{{word}}\", \"definition\": \"<1-2 simple sentences a 5-year-old understands>\", \"imagePrompt\": \"<short image description for a cute cartoon picture of this word>\"}";
 
+// ── S-E — AI Image Editor (inpaint prompt assist) ─────────────────────────────
+
+export const DEFAULT_IMAGE_EDITOR_PROMPT =
+  "You turn a child-friendly EDIT INSTRUCTION into a single, tight inpaint prompt " +
+  "describing ONLY what the masked region should become, matching the existing " +
+  "children's-storybook art style.\n\n" +
+  "Current image: {{currentPrompt}}\n" +
+  "Edit instruction: {{instruction}}\n\n" +
+  "Return ONLY the new inpaint prompt for the masked area — no preamble, no quotes.";
+
 // ── S24 — Story Universe / Continuity ─────────────────────────────────────────
 
 export const CONTINUITY_CONTEXT_TEMPLATE =

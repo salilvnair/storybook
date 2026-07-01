@@ -4,17 +4,24 @@
  * Right-click a tab for the full daakia-style context menu (Duplicate, Close,
  * Close Others, Close to the Right/Left, Close All) via DUI ContextMenuView.
  */
-import { useState, type DragEvent } from 'react';
+import { useState, type DragEvent, type ComponentType } from 'react';
 import { ContextMenuView, type ContextMenuItem } from '@salilvnair/dui';
 import { useTabsStore, type Tab, type TabType } from '../store/tabs-store';
-import { CopyIcon, CloseCircleIcon, CloseIcon, ArrowToRightIcon, ArrowToLeftIcon, TrashIcon, PlusIcon } from '../icons';
+import {
+  CopyIcon, CloseCircleIcon, CloseIcon, ArrowToRightIcon, ArrowToLeftIcon, TrashIcon, PlusIcon,
+  BookIcon, PaletteIcon, DnaIcon, ArchiveIcon, ScrollIcon, SettingsIcon, SparkleIcon,
+} from '../icons';
 
-const TAB_META: Record<TabType, { icon: string; badge: string; color: string }> = {
-  'story': { icon: '📖', badge: 'STORY', color: 'var(--story-accent)' },
-  'templates': { icon: '🎨', badge: 'TMPL', color: 'var(--story-accent-3)' },
-  'library': { icon: '📚', badge: 'LIB', color: 'var(--story-accent-2)' },
-  'sample-preview': { icon: '📄', badge: 'SAMPLE', color: 'var(--story-accent)' },
-  'settings': { icon: '⚙', badge: 'SETTINGS', color: '#94a3b8' },
+type IconCmp = ComponentType<{ size?: number; style?: React.CSSProperties }>;
+
+const TAB_META: Record<TabType, { Icon: IconCmp; color: string }> = {
+  'story': { Icon: BookIcon, color: 'var(--story-accent)' },
+  'templates': { Icon: SparkleIcon, color: 'var(--story-accent-3)' },
+  'character-studio': { Icon: DnaIcon, color: 'var(--story-accent-2)' },
+  'designer': { Icon: PaletteIcon, color: 'var(--story-accent-3)' },
+  'library': { Icon: ArchiveIcon, color: 'var(--story-accent-2)' },
+  'sample-preview': { Icon: ScrollIcon, color: 'var(--story-accent)' },
+  'settings': { Icon: SettingsIcon, color: '#94a3b8' },
 };
 
 interface MenuState { tabId: string; x: number; y: number }
@@ -97,6 +104,7 @@ function TabChip({
   onDragEnd: () => void;
 }) {
   const meta = TAB_META[tab.type];
+  const Icon = meta.Icon;
   return (
     <div
       draggable
@@ -106,10 +114,11 @@ function TabChip({
       onDragEnd={onDragEnd}
       onClick={onClick}
       onContextMenu={onContextMenu}
+      style={active ? { background: `color-mix(in srgb, ${meta.color} 8%, transparent)` } : undefined}
       className={`story-tab${active ? ' is-active' : ''}${dragging ? ' is-dragging' : ''}${dragOver ? ' is-dragover' : ''}`}
     >
       {active && <span className="story-tab-accent" style={{ background: meta.color }} />}
-      <span className="story-tab-icon" style={{ color: meta.color }}>{meta.icon}</span>
+      <span className="story-tab-icon" style={{ color: meta.color }}><Icon size={13} /></span>
       <span className="story-tab-title">{tab.title}</span>
       {tab.closable && (
         <button
@@ -117,7 +126,7 @@ function TabChip({
           title="Close tab"
           onClick={(e) => { e.stopPropagation(); onClose(); }}
         >
-          ×
+          <CloseIcon size={15} />
         </button>
       )}
     </div>

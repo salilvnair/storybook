@@ -27,3 +27,23 @@ export function emitSse(conversationId, stage, data) {
   }
   return true;
 }
+
+/**
+ * Stream a sequence of "thinking" progress lines (VERBOSE) into the typing
+ * indicator while a non-streaming LLM call runs — so endpoints that return a
+ * structured payload (template / character specs) still FEEL live instead of a
+ * sudden REST blob. Returns a `stop()` to call when the work is done; it clears
+ * the progress with ENGINE_RETURN.
+ */
+export function startThinking(conversationId, steps, intervalMs = 650) {
+  let i = 0;
+  // Emit the first step immediately so the indicator updates right away.
+  if (steps.length) emitSse(conversationId, 'VERBOSE', { verbose: { text: steps[i++] } });
+  const timer = setInterval(() => {
+    if (i < steps.length) emitSse(conversationId, 'VERBOSE', { verbose: { text: steps[i++] } });
+  }, intervalMs);
+  return () => {
+    clearInterval(timer);
+    emitSse(conversationId, 'ENGINE_RETURN', { stage: 'ENGINE_RETURN' });
+  };
+}
